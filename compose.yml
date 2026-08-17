@@ -1,5 +1,12 @@
 name: cybersnare
 
+x-python: &python
+  image: localhost/cybersnare-python:lab
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: containers/Dockerfile.python
+
 networks:
   mgmt:
     driver: bridge
@@ -25,10 +32,7 @@ networks:
 
 services:
   decision:
-    build:
-      context: .
-      dockerfile: containers/Dockerfile.python
-    image: localhost/cybersnare-python:lab
+    <<: *python
     container_name: cs-decision
     hostname: decision
     command: ["python", "-m", "services.decision"]
@@ -60,10 +64,7 @@ services:
     restart: unless-stopped
 
   logger:
-    image: localhost/cybersnare-python:lab
-    build:
-      context: .
-      dockerfile: containers/Dockerfile.python
+    <<: *python
     container_name: cs-logger
     hostname: logger
     command: ["python", "-m", "services.logger"]
@@ -99,7 +100,7 @@ services:
     restart: unless-stopped
 
   ssh:
-    image: localhost/cybersnare-python:lab
+    <<: *python
     container_name: cs-ssh
     hostname: ssh-surface
     command: ["python", "-m", "services.ssh_surface"]
@@ -125,7 +126,7 @@ services:
     restart: unless-stopped
 
   http:
-    image: localhost/cybersnare-python:lab
+    <<: *python
     container_name: cs-http
     hostname: http-surface
     command: ["python", "-m", "services.http_surface"]
@@ -151,7 +152,7 @@ services:
     restart: unless-stopped
 
   sinkhole:
-    image: localhost/cybersnare-python:lab
+    <<: *python
     container_name: cs-sinkhole
     hostname: sinkhole
     command: ["python", "-m", "services.sinkhole"]
@@ -176,12 +177,10 @@ services:
     restart: unless-stopped
 
   sandbox:
-    build:
-      context: .
-      dockerfile: containers/Dockerfile.sandbox
-    image: localhost/cybersnare-sandbox:lab
+    <<: *python
     container_name: cs-sandbox
     hostname: sandbox
+    command: ["sleep", "infinity"]
     user: "65534:65534"
     cap_drop:
       - ALL
@@ -194,6 +193,8 @@ services:
     pids_limit: 64
     dns:
       - 10.200.3.2
+    volumes:
+      - ./config/resolv.sandbox:/etc/resolv.conf:ro,z
     networks:
       egress:
         ipv4_address: 10.200.3.10

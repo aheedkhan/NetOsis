@@ -12,24 +12,18 @@ from cs.events import new_event
 from cs.ingest import emit_bg
 from cs.tinyhttp import serve, wait_http
 
-BIND = os.environ.get("CS_BIND", "0.0.0.0")
+SELF_IP = os.environ.get("CS_SELF_IP", "10.200.3.2")
+# Bind only on the egress address. 0.0.0.0 on a dual-homed container
+# sends UDP replies out the mgmt NIC, which the sandbox cannot see.
+HTTP_BIND = os.environ.get("CS_HTTP_BIND", SELF_IP)
+DNS_BIND = os.environ.get("CS_DNS_BIND", SELF_IP)
 HTTP_PORT = int(os.environ.get("CS_HTTP_PORT", "80"))
 DNS_PORT = int(os.environ.get("CS_DNS_PORT", "53"))
-SELF_IP = os.environ.get("CS_SELF_IP", "10.200.3.2")
 LOGGER_HOST = os.environ.get("CS_LOGGER_HOST", "10.200.1.10")
 LOGGER_PORT = int(os.environ.get("CS_LOGGER_PORT", "8088"))
 
 HARMLESS_SH = b"#!/bin/sh\necho sinkholed\nexit 0\n"
 OK_BODY = b"ok\n"
-
-
-def encode_name(labels: list[bytes]) -> bytes:
-    out = bytearray()
-    for label in labels:
-        out.append(len(label))
-        out.extend(label)
-    out.append(0)
-    return bytes(out)
 
 
 def parse_name(data: bytes, offset: int) -> tuple[str, int]:
@@ -66,23 +60,34 @@ def ip_to_bytes(ip: str) -> bytes:
     return socket.inet_aton(ip)
 
 
+def encode_qname(name: str) -> bytes:
+    out = bytearray()
+    for label in name.split("."):
+        raw = label.encode("ascii")
+        out.append(len(raw))
+        out.extend(raw)
+    out.append(0)
+    return bytes(out)
+
+
 def build_a_response(query: bytes, qname: str, qtype: int, qclass: int, qend: int) -> bytes:
     if len(query) < 12:
         return b""
     txn = query[:2]
-    # QR=1, AA=1, RD copied, RA=0
-    rd = query[2] & 0x01
-    flags = struct.pack("!H", 0x8400 | rd)
-    header = txn + flags + struct.pack("!HHHH", 1, 1 if qtype == 1 and qclass == 1 else 0, 0, 0)
+    rd = (query[2] & 0x01) << 8  # RD lives in the high flags byte, not RCODE
+    # QR | AA | RD(copied) | RA. RCODE must stay 0 — OR-ing RD into the
+    # low bit produced FORMERR and musl discarded every answer.
+    flags = struct.pack("!H", 0x8480 | rd)
     question = query[12:qend]
     if qtype == 1 and qclass == 1:
+        header = txn + flags + struct.pack("!HHHH", 1, 1, 0, 0)
+        # Uncompressed name — some stub parsers reject a pointer they cannot chase.
         answer = (
-            b"\xc0\x0c"
+            encode_qname(qname)
             + struct.pack("!HHIH", 1, 1, 30, 4)
             + ip_to_bytes(SELF_IP)
         )
         return header + question + answer
-    # NODATA for anything else (AAAA included) so clients fall through to A.
     header = txn + flags + struct.pack("!HHHH", 1, 0, 0, 0)
     return header + question
 
@@ -164,10 +169,10 @@ async def main() -> None:
     await wait_http(LOGGER_HOST, LOGGER_PORT, "/health")
     loop = asyncio.get_running_loop()
     await loop.create_datagram_endpoint(
-        DnsProtocol, local_addr=(BIND, DNS_PORT)
+        DnsProtocol, local_addr=(DNS_BIND, DNS_PORT)
     )
-    print(f"sinkhole dns on {BIND}:{DNS_PORT} -> {SELF_IP}", flush=True)
-    server = await serve(BIND, HTTP_PORT, http_handler, name="sinkhole-http")
+    print(f"sinkhole dns on {DNS_BIND}:{DNS_PORT} -> {SELF_IP}", flush=True)
+    server = await serve(HTTP_BIND, HTTP_PORT, http_handler, name="sinkhole-http")
     async with server:
         await server.serve_forever()
 

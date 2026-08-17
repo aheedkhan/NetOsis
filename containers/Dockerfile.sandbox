@@ -1,9 +1,0 @@
-FROM alpine:3.21
-
-RUN apk add --no-cache curl wget bind-tools iproute2
-
-WORKDIR /tmp
-
-USER 65534:65534
-
-CMD ["sleep", "infinity"]

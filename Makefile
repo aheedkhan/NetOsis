@@ -3,6 +3,7 @@ COMPOSE = podman compose
 .PHONY: up down logs ps rebuild verify events health
 
 up:
+	systemctl --user start podman.socket
 	mkdir -p data/events data/manifests
 	$(COMPOSE) up -d --build
 
@@ -10,6 +11,7 @@ down:
 	$(COMPOSE) down --remove-orphans
 
 rebuild:
+	systemctl --user start podman.socket
 	mkdir -p data/events data/manifests
 	$(COMPOSE) up -d --build --force-recreate
 

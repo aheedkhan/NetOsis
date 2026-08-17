@@ -50,25 +50,25 @@ else
 fi
 
 echo "== isolation (sandbox must not reach mgmt or the internet) =="
-if podman exec cs-sandbox wget -q -T 3 -O- http://10.200.1.10:8088/health >/dev/null 2>&1; then
+if podman exec cs-sandbox python -c "import socket; socket.create_connection(('10.200.1.10', 8088), 3).close()" 2>/dev/null; then
   bad "sandbox reached logger on mgmt — containment broken"
 else
   ok "sandbox cannot reach logger (10.200.1.10)"
 fi
-if podman exec cs-sandbox wget -q -T 3 -O- http://1.1.1.1/ >/dev/null 2>&1; then
+if podman exec cs-sandbox python -c "import socket; socket.create_connection(('1.1.1.1', 80), 3).close()" 2>/dev/null; then
   bad "sandbox reached 1.1.1.1 — internal network is leaking"
 else
   ok "sandbox cannot reach 1.1.1.1"
 fi
 
 echo "== sinkhole stage 0 =="
-RESOLVE="$(podman exec cs-sandbox nslookup malware.example 10.200.3.2 2>/dev/null | tr '\n' ' ' || true)"
+RESOLVE="$(podman exec cs-sandbox python -c "import socket; print(socket.getaddrinfo('malware.example', 80)[0][4][0])" 2>/dev/null || true)"
 if printf '%s' "$RESOLVE" | grep -q '10.200.3.2'; then
   ok "DNS sinkhole returns 10.200.3.2"
 else
   bad "DNS sinkhole did not return 10.200.3.2 (${RESOLVE})"
 fi
-PAYLOAD="$(podman exec cs-sandbox wget -q -T 3 -O- http://malware.example/payload.sh 2>/dev/null || true)"
+PAYLOAD="$(podman exec cs-sandbox python -c "import urllib.request; print(urllib.request.urlopen('http://malware.example/payload.sh', timeout=3).read().decode())" 2>/dev/null || true)"
 if printf '%s' "$PAYLOAD" | grep -q sinkholed; then
   ok "HTTP sinkhole served a neutered payload"
 else
@@ -76,14 +76,11 @@ else
 fi
 
 echo "== telemetry =="
-TAIL="$(curl -sf --max-time 3 'http://127.0.0.1:18088/v1/tail?n=50' || true)"
-python3 - "$TAIL" <<'PY' || true
-import json, sys
-raw = sys.argv[1] if len(sys.argv) > 1 else ""
-try:
-    data = json.loads(raw)
-except Exception:
-    sys.exit(2)
+MISSING_RC=0
+python3 - <<'PY'
+import json, sys, urllib.request
+raw = urllib.request.urlopen("http://127.0.0.1:18088/v1/tail?n=50", timeout=3).read()
+data = json.loads(raw)
 datasets = {e.get("event", {}).get("dataset") for e in data.get("lines", [])}
 needed = {
     "cybersnare.ssh.banner",
