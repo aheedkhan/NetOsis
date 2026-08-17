@@ -1,11 +1,53 @@
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets/
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+venv/
 .pytest_cache/
-data/events/*.jsonl
-data/events/*.jsonl.*
-data/manifests/current.json
+
+# Editors / OS
 .idea/
 .vscode/
 *.swp
+*~
+.DS_Store
+
+# Lab runtime (system of record stays on disk, not in git)
+data/events/*.jsonl
+data/events/*.jsonl.*
+data/manifests/current.json
+data/manifests/current.json.tmp
+
+# Compose local overrides (often contain host-only bind paths)
+compose.override.yml
+compose.override.yaml
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Saved / exported container images and storage dumps
+*.tar
+*.tar.gz
+*.oci
+*.oci.tar
+*.img
+*.qcow2
+overlay/
+overlay2/
+docker-data/
+podman-data/
+.local/share/containers/
+containers/storage/
+.podman/
+
+# Duplicate of docs/ — keep the source tree, not the zip
+docs.zip
