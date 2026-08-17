@@ -1,0 +1,9 @@
+.git
+docs
+docs.zip
+*.docx
+data
+__pycache__
+*.pyc
+README.md
+Makefile

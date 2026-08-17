@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" width="820" height="420">
+<style>
+  .t   { font-family:Helvetica,Arial,sans-serif; fill:#1c2430; }
+  .ttl { font-size:19px; font-weight:bold; letter-spacing:0.4px; }
+  .lbl { font-size:14.5px; }
+  .sm  { font-size:12.5px; fill:#5a6675; }
+  .cS{fill:#2b6ca3} .cD{fill:#6a4b9c} .cX{fill:#b4661f} .cI{fill:#2b7d5c} .cA{fill:#a83232}
+  .arw { stroke:#4a5464; stroke-width:2.2; fill:none; }
+  .fb  { stroke:#6a4b9c; stroke-width:2; fill:none; stroke-dasharray:7 5; }
+  .tap { stroke:#98a4b3; stroke-width:1.6; fill:none; stroke-dasharray:4 4; }
+</style>
+<defs>
+  <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#4a5464"/></marker>
+  <marker id="p" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#6a4b9c"/></marker>
+  <marker id="g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#98a4b3"/></marker>
+</defs>
+
+<path class="fb" marker-end="url(#p)" d="M709,90 L709,44 Q709,34 699,34 L119,34 Q109,34 109,44 L109,86"/>
+<text class="t sm" x="404" y="27" text-anchor="middle" style="fill:#6a4b9c">feedback — the adversary's response is the control signal</text>
+
+<rect x="22" y="90" width="175" height="100" rx="8" fill="#e8f1f8" stroke="#2b6ca3" stroke-width="2"/>
+<text class="t ttl cS" x="109" y="122" text-anchor="middle">SENSOR</text>
+<text class="t lbl" x="109" y="145" text-anchor="middle">observe · normalise</text>
+<text class="t sm" x="109" y="166" text-anchor="middle">Zeek · Suricata</text>
+<text class="t sm" x="109" y="181" text-anchor="middle">egress gateway</text>
+
+<rect x="222" y="90" width="175" height="100" rx="8" fill="#efeaf7" stroke="#6a4b9c" stroke-width="2"/>
+<text class="t ttl cD" x="309" y="122" text-anchor="middle">DECISION</text>
+<text class="t lbl" x="309" y="145" text-anchor="middle">believe · select</text>
+<text class="t sm" x="309" y="166" text-anchor="middle">belief state · policy</text>
+<text class="t sm" x="309" y="181" text-anchor="middle">surface manifest</text>
+
+<rect x="422" y="90" width="175" height="100" rx="8" fill="#fbf0e3" stroke="#b4661f" stroke-width="2"/>
+<text class="t ttl cX" x="509" y="122" text-anchor="middle">DECEPTION</text>
+<text class="t lbl" x="509" y="145" text-anchor="middle">present · capture</text>
+<text class="t sm" x="509" y="166" text-anchor="middle">SSH · HTTP</text>
+<text class="t sm" x="509" y="181" text-anchor="middle">restricted shell</text>
+
+<rect x="622" y="90" width="175" height="100" rx="8" fill="#fbeaea" stroke="#a83232" stroke-width="2"/>
+<text class="t ttl cA" x="709" y="128" text-anchor="middle">ADVERSARY</text>
+<text class="t sm" x="709" y="153" text-anchor="middle">the process being</text>
+<text class="t sm" x="709" y="169" text-anchor="middle">controlled</text>
+
+<path class="arw" marker-end="url(#a)" d="M197,140 L216,140"/>
+<path class="arw" marker-end="url(#a)" d="M397,140 L416,140"/>
+<path class="arw" marker-end="url(#a)" d="M597,140 L616,140"/>
+
+<path class="tap" marker-end="url(#g)" d="M109,190 L109,296"/>
+<path class="tap" marker-end="url(#g)" d="M309,190 L309,296"/>
+<path class="tap" marker-end="url(#g)" d="M509,190 L509,296"/>
+<text class="t sm" x="128" y="248">slow path — outside the decision budget</text>
+
+<rect x="22" y="300" width="775" height="85" rx="8" fill="#e6f4ed" stroke="#2b7d5c" stroke-width="2"/>
+<text class="t ttl cI" x="409" y="332" text-anchor="middle">INTELLIGENCE</text>
+<text class="t lbl" x="409" y="355" text-anchor="middle">correlate · ATT&amp;CK and Engage mapping · actor profiles · reporting</text>
+<text class="t sm" x="409" y="374" text-anchor="middle">never in the fast path of any decision</text>
+</svg>

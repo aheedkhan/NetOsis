@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 470" width="820" height="470">
+<style>
+  .t   { font-family:Helvetica,Arial,sans-serif; fill:#1c2430; }
+  .hd  { font-size:14px; font-weight:bold; letter-spacing:0.4px; }
+  .ttl { font-size:12.5px; font-weight:bold; }
+  .lbl { font-size:11.5px; }
+  .sm  { font-size:10.5px; fill:#5a6675; }
+  .arw { stroke:#4a5464; stroke-width:1.8; fill:none; }
+  .tun { stroke:#2b7d5c; stroke-width:2.2; fill:none; stroke-dasharray:6 4; }
+</style>
+<defs>
+  <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#4a5464"/></marker>
+  <marker id="g" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2b7d5c"/></marker>
+</defs>
+
+<!-- ============ PREFERRED ============ -->
+<rect x="14" y="14" width="256" height="404" rx="9" fill="#f4f9f6" stroke="#2b7d5c" stroke-width="2.4"/>
+<rect x="14" y="14" width="256" height="30" rx="9" fill="#2b7d5c"/>
+<text class="t hd" x="142" y="35" text-anchor="middle" fill="#ffffff">PREFERRED</text>
+<text class="t sm" x="142" y="60" text-anchor="middle">three IPs, one provider, one subnet</text>
+
+<rect x="40" y="74" width="204" height="34" rx="6" fill="#fbeaea" stroke="#a83232" stroke-width="1.6"/>
+<text class="t ttl" x="142" y="96" text-anchor="middle">ADVERSARIES</text>
+<path class="arw" marker-end="url(#a)" d="M142,108 L142,128"/>
+
+<rect x="40" y="132" width="204" height="84" rx="6" fill="#ffffff" stroke="#4a5464" stroke-width="1.8"/>
+<text class="t ttl" x="142" y="152" text-anchor="middle">RENTED FRONT-END</text>
+<rect x="54" y="160" width="56" height="22" rx="4" fill="#e8f1f8" stroke="#2b6ca3" stroke-width="1.2"/>
+<text class="t sm" x="82" y="175" text-anchor="middle">IP · arm A</text>
+<rect x="114" y="160" width="56" height="22" rx="4" fill="#efeaf7" stroke="#6a4b9c" stroke-width="1.2"/>
+<text class="t sm" x="142" y="175" text-anchor="middle">IP · arm B</text>
+<rect x="174" y="160" width="56" height="22" rx="4" fill="#fbf0e3" stroke="#b4661f" stroke-width="1.2"/>
+<text class="t sm" x="202" y="175" text-anchor="middle">IP · arm C</text>
+<text class="t sm" x="142" y="199" text-anchor="middle">egress gateway + sinkhole</text>
+<text class="t sm" x="142" y="211" text-anchor="middle">attribution lands here</text>
+
+<path class="tun" marker-end="url(#g)" d="M142,216 L142,246"/>
+<text class="t sm" x="150" y="235" style="fill:#2b7d5c">WireGuard</text>
+
+<rect x="40" y="250" width="204" height="30" rx="6" fill="#eef1f5" stroke="#98a4b3" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text class="t ttl" x="142" y="270" text-anchor="middle" style="fill:#5a6675">university edge — unchanged</text>
+
+<path class="arw" marker-end="url(#a)" d="M142,280 L142,300"/>
+
+<rect x="40" y="304" width="204" height="94" rx="6" fill="#ffffff" stroke="#4a5464" stroke-width="1.8"/>
+<text class="t ttl" x="142" y="324" text-anchor="middle">LAB SERVER</text>
+<text class="t lbl" x="142" y="345" text-anchor="middle">VLAN-10 deception + sandbox</text>
+<text class="t lbl" x="142" y="363" text-anchor="middle">VLAN-20 decision + storage</text>
+<text class="t sm" x="142" y="383" text-anchor="middle">dials out — no inbound rule,</text>
+<text class="t sm" x="142" y="394" text-anchor="middle">no admin request needed</text>
+
+<text class="t sm" x="142" y="412" text-anchor="middle" style="fill:#a83232">status: requires a purchase decision</text>
+
+<!-- ============ ALTERNATIVE ============ -->
+<rect x="282" y="14" width="256" height="404" rx="9" fill="#f7f8fa" stroke="#4a5464" stroke-width="2"/>
+<rect x="282" y="14" width="256" height="30" rx="9" fill="#4a5464"/>
+<text class="t hd" x="410" y="35" text-anchor="middle" fill="#ffffff">ALTERNATIVE</text>
+<text class="t sm" x="410" y="60" text-anchor="middle">DMZ address from the network admin</text>
+
+<rect x="308" y="74" width="204" height="34" rx="6" fill="#fbeaea" stroke="#a83232" stroke-width="1.6"/>
+<text class="t ttl" x="410" y="96" text-anchor="middle">ADVERSARIES</text>
+<path class="arw" marker-end="url(#a)" d="M410,108 L410,132"/>
+
+<rect x="308" y="136" width="204" height="60" rx="6" fill="#fdf6e8" stroke="#b4661f" stroke-width="1.8"/>
+<text class="t ttl" x="410" y="158" text-anchor="middle">UNIVERSITY EDGE</text>
+<text class="t lbl" x="410" y="178" text-anchor="middle">inbound DNAT required</text>
+<text class="t sm" x="410" y="191" text-anchor="middle">admin request · feasibility unknown</text>
+
+<path class="arw" marker-end="url(#a)" d="M410,196 L410,224"/>
+
+<rect x="308" y="228" width="204" height="94" rx="6" fill="#ffffff" stroke="#4a5464" stroke-width="1.8"/>
+<text class="t ttl" x="410" y="248" text-anchor="middle">LAB SERVER</text>
+<text class="t lbl" x="410" y="269" text-anchor="middle">deception + decision + storage</text>
+<text class="t sm" x="410" y="290" text-anchor="middle">egress attribution lands on the</text>
+<text class="t sm" x="410" y="302" text-anchor="middle">university address</text>
+<text class="t sm" x="410" y="316" text-anchor="middle" style="fill:#a83232">— the main drawback</text>
+
+<text class="t sm" x="410" y="350" text-anchor="middle">three addresses still needed</text>
+<text class="t sm" x="410" y="366" text-anchor="middle">for the three arms</text>
+<text class="t sm" x="410" y="412" text-anchor="middle" style="fill:#a83232">status: requires an admin request</text>
+
+<!-- ============ FALLBACK ============ -->
+<rect x="550" y="14" width="256" height="404" rx="9" fill="#f7f8fa" stroke="#98a4b3" stroke-width="2"/>
+<rect x="550" y="14" width="256" height="30" rx="9" fill="#98a4b3"/>
+<text class="t hd" x="678" y="35" text-anchor="middle" fill="#ffffff">FALLBACK</text>
+<text class="t sm" x="678" y="60" text-anchor="middle">single exposure point, time-sliced</text>
+
+<rect x="576" y="74" width="204" height="34" rx="6" fill="#fbeaea" stroke="#a83232" stroke-width="1.6"/>
+<text class="t ttl" x="678" y="96" text-anchor="middle">ADVERSARIES</text>
+<path class="arw" marker-end="url(#a)" d="M678,108 L678,132"/>
+
+<rect x="576" y="136" width="204" height="34" rx="6" fill="#ffffff" stroke="#4a5464" stroke-width="1.8"/>
+<text class="t ttl" x="678" y="158" text-anchor="middle">ONE EXPOSURE POINT</text>
+
+<path class="arw" marker-end="url(#a)" d="M678,170 L678,192"/>
+
+<rect x="576" y="196" width="204" height="128" rx="6" fill="#ffffff" stroke="#4a5464" stroke-width="1.8"/>
+<text class="t ttl" x="678" y="216" text-anchor="middle">LATIN-SQUARE ROTATION</text>
+<rect x="592" y="228" width="58" height="24" rx="4" fill="#e8f1f8" stroke="#2b6ca3" stroke-width="1.2"/>
+<text class="t sm" x="621" y="244" text-anchor="middle">A</text>
+<rect x="654" y="228" width="58" height="24" rx="4" fill="#efeaf7" stroke="#6a4b9c" stroke-width="1.2"/>
+<text class="t sm" x="683" y="244" text-anchor="middle">B</text>
+<rect x="716" y="228" width="48" height="24" rx="4" fill="#fbf0e3" stroke="#b4661f" stroke-width="1.2"/>
+<text class="t sm" x="740" y="244" text-anchor="middle">C</text>
+<rect x="592" y="256" width="58" height="24" rx="4" fill="#efeaf7" stroke="#6a4b9c" stroke-width="1.2"/>
+<text class="t sm" x="621" y="272" text-anchor="middle">B</text>
+<rect x="654" y="256" width="58" height="24" rx="4" fill="#fbf0e3" stroke="#b4661f" stroke-width="1.2"/>
+<text class="t sm" x="683" y="272" text-anchor="middle">C</text>
+<rect x="716" y="256" width="48" height="24" rx="4" fill="#e8f1f8" stroke="#2b6ca3" stroke-width="1.2"/>
+<text class="t sm" x="740" y="272" text-anchor="middle">A</text>
+<text class="t sm" x="678" y="298" text-anchor="middle">balanced across time-of-day</text>
+<text class="t sm" x="678" y="312" text-anchor="middle">and day-of-week</text>
+
+<text class="t sm" x="678" y="346" text-anchor="middle">weaker — traffic populations</text>
+<text class="t sm" x="678" y="360" text-anchor="middle">vary by hour and weekday</text>
+<text class="t sm" x="678" y="412" text-anchor="middle" style="fill:#2b7d5c">status: always available</text>
+
+<text class="t sm" x="410" y="442" text-anchor="middle">Rejected in all three: separate ports as the primary experimental separation —</text>
+<text class="t sm" x="410" y="458" text-anchor="middle">adversaries scan ports non-uniformly, so the arms would differ before any treatment applied.</text>
+</svg>

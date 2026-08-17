@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 560" width="820" height="560">
+<style>
+  .t   { font-family:Helvetica,Arial,sans-serif; fill:#1c2430; }
+  .ttl { font-size:15.5px; font-weight:bold; }
+  .sm  { font-size:12px; fill:#5a6675; }
+  .note{ font-size:12.5px; fill:#6a4b9c; font-style:italic; }
+  .arw { stroke:#4a5464; stroke-width:2.2; fill:none; }
+</style>
+<defs>
+  <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#4a5464"/></marker>
+</defs>
+
+<rect x="260" y="20" width="300" height="56" rx="7" fill="#e8f1f8" stroke="#2b6ca3" stroke-width="2"/>
+<text class="t ttl" x="410" y="44" text-anchor="middle">TELEMETRY</text>
+<text class="t sm" x="410" y="64" text-anchor="middle">host / session · network · egress</text>
+
+<path class="arw" marker-end="url(#a)" d="M410,76 L410,100"/>
+
+<rect x="260" y="104" width="300" height="56" rx="7" fill="#e8f1f8" stroke="#2b6ca3" stroke-width="2"/>
+<text class="t ttl" x="410" y="128" text-anchor="middle">BEHAVIOURAL EVIDENCE</text>
+<text class="t sm" x="410" y="148" text-anchor="middle">normalised, correlated, actor-linked</text>
+
+<path class="arw" marker-end="url(#a)" d="M410,160 L410,184"/>
+
+<rect x="260" y="188" width="300" height="56" rx="7" fill="#efeaf7" stroke="#6a4b9c" stroke-width="2"/>
+<text class="t ttl" x="410" y="212" text-anchor="middle">SCORING / FEATURES</text>
+<text class="t sm" x="410" y="232" text-anchor="middle">objective O1, retained — as evidence</text>
+
+<text class="t note" x="576" y="218">the score is evidence,</text>
+<text class="t note" x="576" y="235">not the verdict</text>
+
+<!-- split -->
+<path class="arw" d="M410,244 L410,264"/>
+<path class="arw" marker-end="url(#a)" d="M410,264 L210,264 L210,292"/>
+<path class="arw" marker-end="url(#a)" d="M410,264 L610,264 L610,292"/>
+
+<rect x="90" y="296" width="240" height="70" rx="7" fill="#efeaf7" stroke="#6a4b9c" stroke-width="2"/>
+<text class="t ttl" x="210" y="322" text-anchor="middle">INTENT INFERENCE</text>
+<text class="t sm" x="210" y="342" text-anchor="middle">distribution over objectives</text>
+<text class="t sm" x="210" y="357" text-anchor="middle">out of band · never in request path</text>
+
+<rect x="490" y="296" width="240" height="70" rx="7" fill="#efeaf7" stroke="#6a4b9c" stroke-width="2"/>
+<text class="t ttl" x="610" y="322" text-anchor="middle">CONFIDENCE</text>
+<text class="t sm" x="610" y="342" text-anchor="middle">linkage confidence · suspicion</text>
+<text class="t sm" x="610" y="357" text-anchor="middle">novelty</text>
+
+<!-- merge -->
+<path class="arw" d="M210,366 L210,392 L410,392"/>
+<path class="arw" d="M610,366 L610,392 L410,392"/>
+<path class="arw" marker-end="url(#a)" d="M410,392 L410,416"/>
+
+<rect x="230" y="420" width="360" height="68" rx="7" fill="#fbf0e3" stroke="#b4661f" stroke-width="2.4"/>
+<text class="t ttl" x="410" y="446" text-anchor="middle">CONTROL PLANE</text>
+<text class="t sm" x="410" y="466" text-anchor="middle">select deception capabilities</text>
+<text class="t sm" x="410" y="481" text-anchor="middle">emit surface manifest</text>
+
+<path class="arw" marker-end="url(#a)" d="M410,488 L410,510"/>
+
+<rect x="280" y="514" width="260" height="34" rx="7" fill="#f1f4f7" stroke="#4a5464" stroke-width="1.8"/>
+<text class="t ttl" x="410" y="536" text-anchor="middle">DECEPTION ENVIRONMENT</text>
+</svg>

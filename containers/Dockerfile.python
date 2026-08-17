@@ -1,0 +1,12 @@
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+COPY lib /app/lib
+COPY services /app/services
+
+ENV PYTHONPATH=/app/lib:/app \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "services.logger"]

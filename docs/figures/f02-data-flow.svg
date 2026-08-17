@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 430" width="820" height="430">
+<style>
+  .t   { font-family:Helvetica,Arial,sans-serif; fill:#1c2430; }
+  .ttl { font-size:15px; font-weight:bold; }
+  .lbl { font-size:13.5px; }
+  .sm  { font-size:11.5px; fill:#5a6675; }
+  .band{ font-size:13px; font-weight:bold; letter-spacing:0.6px; }
+  .arw { stroke:#4a5464; stroke-width:2; fill:none; }
+  .arwF{ stroke:#a83232; stroke-width:2.4; fill:none; }
+  .arwS{ stroke:#2b7d5c; stroke-width:2; fill:none; }
+</style>
+<defs>
+  <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#4a5464"/></marker>
+  <marker id="f" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#a83232"/></marker>
+  <marker id="s" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#2b7d5c"/></marker>
+</defs>
+
+<!-- source column -->
+<rect x="18" y="70" width="140" height="255" rx="8" fill="#fbeaea" stroke="#a83232" stroke-width="2"/>
+<text class="t ttl" x="88" y="98" text-anchor="middle" style="fill:#a83232">INGRESS</text>
+<text class="t lbl" x="88" y="126" text-anchor="middle">adversary packet</text>
+<text class="t sm" x="88" y="152" text-anchor="middle">exposure point</text>
+<line x1="38" y1="168" x2="138" y2="168" stroke="#d8b5b5" stroke-width="1.5"/>
+<text class="t lbl" x="88" y="192" text-anchor="middle">deception surface</text>
+<text class="t lbl" x="88" y="214" text-anchor="middle">Zeek sensor</text>
+<text class="t lbl" x="88" y="236" text-anchor="middle">egress gateway</text>
+<text class="t sm" x="88" y="264" text-anchor="middle">every source emits the</text>
+<text class="t sm" x="88" y="280" text-anchor="middle">same canonical event</text>
+<text class="t sm" x="88" y="304" text-anchor="middle">envelope</text>
+
+<!-- fast band -->
+<rect x="172" y="42" width="632" height="24" rx="4" fill="#fbeaea"/>
+<text class="t band" x="182" y="59" style="fill:#a83232">FAST PATH — closes the control loop · budget &lt; 100 ms · never touches a datastore</text>
+
+<rect x="180" y="78" width="143" height="76" rx="7" fill="#ffffff" stroke="#a83232" stroke-width="1.8"/>
+<text class="t ttl" x="251" y="106" text-anchor="middle">normalise</text>
+<text class="t sm" x="251" y="127" text-anchor="middle">resolve actor by</text>
+<text class="t sm" x="251" y="142" text-anchor="middle">fingerprint</text>
+
+<rect x="341" y="78" width="143" height="76" rx="7" fill="#ffffff" stroke="#a83232" stroke-width="1.8"/>
+<text class="t ttl" x="412" y="106" text-anchor="middle">update belief</text>
+<text class="t sm" x="412" y="127" text-anchor="middle">intent · suspicion</text>
+<text class="t sm" x="412" y="142" text-anchor="middle">novelty · score</text>
+
+<rect x="502" y="78" width="143" height="76" rx="7" fill="#ffffff" stroke="#a83232" stroke-width="1.8"/>
+<text class="t ttl" x="573" y="106" text-anchor="middle">evaluate policy</text>
+<text class="t sm" x="573" y="127" text-anchor="middle">P0 · P1 · P2</text>
+<text class="t sm" x="573" y="142" text-anchor="middle">emit manifest</text>
+
+<rect x="663" y="78" width="143" height="76" rx="7" fill="#ffffff" stroke="#a83232" stroke-width="1.8"/>
+<text class="t ttl" x="734" y="106" text-anchor="middle">reconcile</text>
+<text class="t sm" x="734" y="127" text-anchor="middle">attach pre-staged</text>
+<text class="t sm" x="734" y="142" text-anchor="middle">capability &lt; 1 s</text>
+
+<path class="arwF" marker-end="url(#f)" d="M158,116 L174,116"/>
+<path class="arwF" marker-end="url(#f)" d="M323,116 L335,116"/>
+<path class="arwF" marker-end="url(#f)" d="M484,116 L496,116"/>
+<path class="arwF" marker-end="url(#f)" d="M645,116 L657,116"/>
+
+<!-- divider -->
+<line x1="172" y1="182" x2="804" y2="182" stroke="#c8d0da" stroke-width="1.5" stroke-dasharray="6 5"/>
+
+<!-- slow band -->
+<rect x="172" y="200" width="632" height="24" rx="4" fill="#e6f4ed"/>
+<text class="t band" x="182" y="217" style="fill:#2b7d5c">SLOW PATH — analysis · seconds to minutes · must never enter the fast path</text>
+
+<rect x="180" y="236" width="143" height="76" rx="7" fill="#ffffff" stroke="#2b7d5c" stroke-width="1.8"/>
+<text class="t ttl" x="251" y="264" text-anchor="middle">append-only log</text>
+<text class="t sm" x="251" y="285" text-anchor="middle">JSONL on disk</text>
+<text class="t sm" x="251" y="300" text-anchor="middle">system of record</text>
+
+<rect x="341" y="236" width="143" height="76" rx="7" fill="#ffffff" stroke="#2b7d5c" stroke-width="1.8"/>
+<text class="t ttl" x="412" y="264" text-anchor="middle">index</text>
+<text class="t sm" x="412" y="285" text-anchor="middle">Elasticsearch or</text>
+<text class="t sm" x="412" y="300" text-anchor="middle">DuckDB — a view</text>
+
+<rect x="502" y="236" width="143" height="76" rx="7" fill="#ffffff" stroke="#2b7d5c" stroke-width="1.8"/>
+<text class="t ttl" x="573" y="264" text-anchor="middle">enrich</text>
+<text class="t sm" x="573" y="285" text-anchor="middle">ATT&amp;CK · Engage</text>
+<text class="t sm" x="573" y="300" text-anchor="middle">geo · reputation</text>
+
+<rect x="663" y="236" width="143" height="76" rx="7" fill="#ffffff" stroke="#2b7d5c" stroke-width="1.8"/>
+<text class="t ttl" x="734" y="264" text-anchor="middle">analyst output</text>
+<text class="t sm" x="734" y="285" text-anchor="middle">timelines · profiles</text>
+<text class="t sm" x="734" y="300" text-anchor="middle">reports</text>
+
+<path class="arwS" marker-end="url(#s)" d="M158,274 L174,274"/>
+<path class="arwS" marker-end="url(#s)" d="M323,274 L335,274"/>
+<path class="arwS" marker-end="url(#s)" d="M484,274 L496,274"/>
+<path class="arwS" marker-end="url(#s)" d="M645,274 L657,274"/>
+
+<text class="t sm" x="410" y="360" text-anchor="middle">Replay: the raw log alone can regenerate every box on the slow path.</text>
+<text class="t sm" x="410" y="378" text-anchor="middle">A bug in enrichment costs a re-run, not a dataset.</text>
+</svg>

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+data/events/*.jsonl
+data/events/*.jsonl.*
+data/manifests/current.json
+.idea/
+.vscode/
+*.swp

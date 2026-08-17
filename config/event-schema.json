@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cybersnare.local/schema/event-v1.json",
+  "title": "CyberSnare canonical event envelope v1",
+  "description": "Frozen before services were written. Aligns to ECS where a field exists. Additional properties are allowed so sources can attach extra evidence without a schema bump.",
+  "type": "object",
+  "required": [
+    "@timestamp",
+    "event",
+    "session",
+    "source",
+    "destination",
+    "network",
+    "user",
+    "threat",
+    "deception",
+    "cybersnare"
+  ],
+  "properties": {
+    "@timestamp": { "type": "string", "format": "date-time" },
+    "event": {
+      "type": "object",
+      "required": ["kind", "category", "action", "dataset"],
+      "properties": {
+        "kind": { "type": "string" },
+        "category": { "type": "array", "items": { "type": "string" } },
+        "action": { "type": "string" },
+        "dataset": { "type": "string" }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": ["id", "actor_key", "arm", "level"],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "actor_key": { "type": "string" },
+        "arm": { "type": "string", "enum": ["A", "B", "C"] },
+        "level": {
+          "type": "string",
+          "enum": ["L0", "L1", "L2", "L3", "BURN", "BLOCK"]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "ip": { "type": ["string", "null"] },
+        "port": { "type": ["integer", "null"] }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "properties": {
+        "ip": { "type": ["string", "null"] },
+        "port": { "type": ["integer", "null"] },
+        "service": { "type": ["string", "null"] }
+      }
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "hassh": { "type": ["string", "null"] },
+        "ja4": { "type": ["string", "null"] },
+        "ua_signature": { "type": ["string", "null"] }
+      }
+    },
+    "user": {
+      "type": "object",
+      "properties": {
+        "name": { "type": ["string", "null"] }
+      }
+    },
+    "threat": {
+      "type": "object",
+      "properties": {
+        "technique": {
+          "type": "object",
+          "properties": {
+            "id": { "type": ["string", "null"] },
+            "name": { "type": ["string", "null"] }
+          }
+        },
+        "tactic": {
+          "type": "object",
+          "properties": {
+            "id": { "type": ["string", "null"] },
+            "name": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "deception": {
+      "type": "object",
+      "properties": {
+        "capability": { "type": ["string", "null"] },
+        "manifest_id": { "type": ["string", "null"] },
+        "engage_activity": { "type": ["string", "null"] }
+      }
+    },
+    "cybersnare": {
+      "type": "object",
+      "properties": {
+        "score_delta": { "type": ["number", "null"] },
+        "intent": { "type": ["string", "null"] },
+        "confidence": { "type": ["number", "null"] },
+        "suspicion": { "type": ["number", "null"] },
+        "novelty": { "type": ["number", "null"] }
+      }
+    }
+  },
+  "additionalProperties": true
+}

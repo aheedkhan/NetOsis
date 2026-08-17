@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 430" width="820" height="430">
+<style>
+  .t   { font-family:Helvetica,Arial,sans-serif; fill:#1c2430; }
+  .ttl { font-size:14.5px; font-weight:bold; }
+  .lbl { font-size:12.5px; }
+  .sm  { font-size:11px; fill:#5a6675; }
+  .mono{ font-family:Courier,monospace; font-size:11.5px; fill:#1c2430; }
+  .arw { stroke:#4a5464; stroke-width:2.2; fill:none; }
+  .loop{ stroke:#6a4b9c; stroke-width:2; fill:none; stroke-dasharray:7 5; }
+</style>
+<defs>
+  <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#4a5464"/></marker>
+  <marker id="p" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#6a4b9c"/></marker>
+</defs>
+
+<rect x="18" y="70" width="184" height="180" rx="8" fill="#efeaf7" stroke="#6a4b9c" stroke-width="2.2"/>
+<text class="t ttl" x="110" y="96" text-anchor="middle" style="fill:#6a4b9c">BELIEF STATE</text>
+<line x1="36" y1="106" x2="184" y2="106" stroke="#cbbde0" stroke-width="1.4"/>
+<text class="t mono" x="36" y="128">identity</text>
+<text class="t mono" x="36" y="150">capability</text>
+<text class="t mono" x="36" y="172">intent</text>
+<text class="t mono" x="36" y="194">engagement</text>
+<text class="t mono" x="36" y="216">suspicion</text>
+<text class="t mono" x="36" y="238">novelty</text>
+
+<path class="arw" marker-end="url(#a)" d="M202,160 L226,160"/>
+
+<rect x="230" y="70" width="184" height="180" rx="8" fill="#ffffff" stroke="#6a4b9c" stroke-width="2.2"/>
+<text class="t ttl" x="322" y="96" text-anchor="middle" style="fill:#6a4b9c">POLICY</text>
+<line x1="248" y1="106" x2="396" y2="106" stroke="#cbbde0" stroke-width="1.4"/>
+<text class="t lbl" x="248" y="128">P0  static</text>
+<text class="t lbl" x="248" y="150">P1  utility-maximising</text>
+<text class="t lbl" x="248" y="172">P2  intent-conditioned</text>
+<text class="t lbl" x="248" y="194">P3  learned  (future)</text>
+<text class="t sm" x="248" y="220">one interface, four</text>
+<text class="t sm" x="248" y="234">implementations — this is</text>
+<text class="t sm" x="248" y="248">the experiment itself</text>
+
+<path class="arw" marker-end="url(#a)" d="M414,160 L438,160"/>
+
+<rect x="442" y="70" width="184" height="180" rx="8" fill="#fbf0e3" stroke="#b4661f" stroke-width="2.2"/>
+<text class="t ttl" x="534" y="96" text-anchor="middle" style="fill:#b4661f">MANIFEST</text>
+<line x1="460" y1="106" x2="608" y2="106" stroke="#e0c4a2" stroke-width="1.4"/>
+<text class="t sm" x="460" y="124">declarative — what should</text>
+<text class="t sm" x="460" y="138">be exposed, not how</text>
+<text class="t mono" x="460" y="162">open(ssh_auth)</text>
+<text class="t mono" x="460" y="182">populate(fs, b7)</text>
+<text class="t mono" x="460" y="202">delay(120ms)</text>
+<text class="t mono" x="460" y="222">close(smb)</text>
+<text class="t sm" x="460" y="242">+ rationale, for the report</text>
+
+<path class="arw" marker-end="url(#a)" d="M626,160 L650,160"/>
+
+<rect x="654" y="70" width="150" height="180" rx="8" fill="#ffffff" stroke="#b4661f" stroke-width="2.2"/>
+<text class="t ttl" x="729" y="96" text-anchor="middle" style="fill:#b4661f">ACTUATOR</text>
+<line x1="668" y1="106" x2="790" y2="106" stroke="#e0c4a2" stroke-width="1.4"/>
+<text class="t lbl" x="729" y="130" text-anchor="middle">reconcile reality</text>
+<text class="t lbl" x="729" y="150" text-anchor="middle">toward the manifest</text>
+<text class="t sm" x="729" y="176" text-anchor="middle">attaches pre-staged</text>
+<text class="t sm" x="729" y="190" text-anchor="middle">capabilities</text>
+<text class="t sm" x="729" y="214" text-anchor="middle" style="fill:#a83232">creates nothing</text>
+<text class="t sm" x="729" y="230" text-anchor="middle" style="fill:#a83232">on the hot path</text>
+
+<!-- loop back -->
+<path class="loop" marker-end="url(#p)" d="M729,250 L729,286 Q729,296 719,296 L120,296 Q110,296 110,286 L110,256"/>
+<text class="t sm" x="420" y="288" text-anchor="middle" style="fill:#6a4b9c">observed response updates the belief state — the loop closes here</text>
+
+<rect x="18" y="322" width="786" height="88" rx="7" fill="#f7f8fa" stroke="#c8d0da" stroke-width="1.6"/>
+<text class="t ttl" x="411" y="346" text-anchor="middle">Why the manifest is declarative</text>
+<text class="t lbl" x="411" y="370" text-anchor="middle">A policy that issues commands must know what already exists. A policy that declares a desired state need not.</text>
+<text class="t lbl" x="411" y="390" text-anchor="middle">That is what allows P0, P1, P2 and P3 to be swapped without any of them understanding the actuator.</text>
+</svg>

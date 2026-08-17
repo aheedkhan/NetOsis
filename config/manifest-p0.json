@@ -1,0 +1,31 @@
+{
+  "manifest_id": "p0-static-v1",
+  "policy": "P0",
+  "arm": "A",
+  "level": "L1",
+  "rationale": "Scope-A lab: static attract surface. Authentication is closed. No shell. Capabilities are pre-staged and do not change with scoring.",
+  "engage_activity": "EAC0003",
+  "capabilities": {
+    "ssh": {
+      "exposed": true,
+      "listen": "0.0.0.0:2222",
+      "auth": "closed",
+      "banner": "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13"
+    },
+    "http": {
+      "exposed": true,
+      "listen": "0.0.0.0:8080",
+      "auth": "closed",
+      "persona": "NexusCorp Employee Portal"
+    },
+    "shell": {
+      "exposed": false,
+      "reason": "Authentication gate not passed. Nineteen properties are not yet demonstrated."
+    },
+    "sinkhole": {
+      "exposed": true,
+      "stage": 0,
+      "behaviour": "DNS and HTTP answered locally. Nothing reaches a real network."
+    }
+  }
+}
