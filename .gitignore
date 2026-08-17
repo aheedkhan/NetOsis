@@ -51,3 +51,11 @@ containers/storage/
 
 # Duplicate of docs/ — keep the source tree, not the zip
 docs.zip
+
+# Office / generated docs — source of truth is markdown + figures
+*.doc
+*.docx
+*.docm
+~$*
+*.pdf
+docs/build/*.txt
