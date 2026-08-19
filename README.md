@@ -1,72 +1,66 @@
-# CyberSnare local lab (Scope A)
+# CyberSnare local lab (Scope B)
 
-Local-only adaptive-deception **skeleton**. It is not the full Milestone 1 system.
-
-This slice exists to prove four things before any public exposure or SSH login:
-
-1. The four planes exist as separate processes.
-2. A canonical event envelope is frozen and the JSONL log is the system of record.
-3. Policy P0 is a stub that always emits the same manifest (auth closed, no shell).
-4. A disposable sandbox has **no path to the internet or the management network**; outbound DNS/HTTP are sinkholed.
+Local-only adaptive-deception lab. Scope B **extends** Scope A: same four planes, same JSONL log, same closed login. The new piece is the **sensor plane** (Zeek) plus a real SSH handshake and HTTPS so HASSH/JA4 exist on the wire.
 
 Nothing listens on `0.0.0.0`. Published ports are bound to `127.0.0.1` only. Authentication is **closed**. Do not port-forward this stack off the machine.
 
 ## Topology
 
+Zeek, SSH, and HTTP/HTTPS share one network namespace (a lab tap). Podman bridges cannot sniff unicast between two other containers, so this is how Zeek sees KEX and TLS ClientHello without a second addressable monitor on the deception LAN.
+
 ```
 host loopback
-  127.0.0.1:2222  →  ssh-surface   (deception 10.200.2.10)
-  127.0.0.1:8080  →  http-surface  (deception 10.200.2.11)
+  127.0.0.1:2222  →  ssh (KEX, auth refused)
+  127.0.0.1:8080  →  http portal
+  127.0.0.1:8443  →  https portal
   127.0.0.1:18088 →  logger        (mgmt 10.200.1.10)
   127.0.0.1:19000 →  decision      (mgmt 10.200.1.11)
 
-cs-mgmt      10.200.1.0/24   internal  logger, decision
-cs-deception 10.200.2.0/24   internal  ssh, http
+cs-mgmt      10.200.1.0/24   internal  logger, decision, zeek-ingest, sensor-mgmt
+cs-deception 10.200.2.0/24   internal  sensor 10.200.2.10 (ssh/http share this netns)
 cs-egress    10.200.3.0/24   internal  sinkhole 10.200.3.2, sandbox 10.200.3.10
 ```
 
-The sandbox is attached **only** to `cs-egress`. Podman would otherwise point DNS at the bridge (`.1`), so `config/resolv.sandbox` is bind-mounted as `/etc/resolv.conf` and forces `10.200.3.2`. Stage 0 means a lookup for `malware.example` returns `10.200.3.2` and `wget http://malware.example/x.sh` appears to succeed without leaving the lab.
-
 ## Start
-
-Needs Podman 5+ with Compose. `make up` starts the user API socket first (`systemctl --user start podman.socket`).
 
 ```bash
 make up
 make verify
 ```
 
-Useful:
+`make up` starts the user API socket first (`systemctl --user start podman.socket`).
 
 ```bash
-make health          # logger + decision
-make events          # last events in the JSONL
+make health
+make events
 make logs
 make down
 ```
 
-Raw log on disk: `data/events/events.jsonl`.
+Raw log: `data/events/events.jsonl`. Zeek JSON: `data/zeek/`.
 
-## What each container is
+## Containers
 
-| Container | Plane | Job in this slice |
+| Container | Plane | Job |
 |---|---|---|
-| `cs-logger` | Intelligence / bus | Accepts events, appends JSONL, forwards to decision. Disk-fill rotate at 100 MiB. |
-| `cs-decision` | Decision | Policy **P0**: record belief, always the same manifest. |
-| `cs-ssh` | Deception | RFC 4253 identification string, then close. No KEX, no auth. |
-| `cs-http` | Deception | Fake NexusCorp portal. Login always 401. |
-| `cs-sinkhole` | Sensor / egress | Stage-0 DNS + HTTP responder. |
-| `cs-sandbox` | Attacker workload stand-in | Unprivileged, read-only, 64 MiB, no mgmt route. |
+| `cs-logger` | Intelligence / bus | Append-only JSONL; forwards to decision |
+| `cs-decision` | Decision | Policy P0 plus actor map (`hassh:` / `ja4:` / `ip:`) |
+| `cs-sensor` | Sensor | Zeek on the shared deception netns (HASSH, JA4) |
+| `cs-zeek-ingest` | Sensor | Tails Zeek JSON into the frozen envelope |
+| `cs-ssh` | Deception | asyncssh KEX, every login refused |
+| `cs-http` | Deception | HTTP :8080 and HTTPS :8443, login 401 |
+| `cs-sinkhole` | Egress | Stage-0 DNS + HTTP |
+| `cs-sandbox` | Attacker stand-in | Unprivileged, no mgmt or internet route |
 
-## Not in this slice (by design)
+## Still not in this slice
 
-Zeek, Suricata, real SSH authentication, a disposable shell, Kubernetes, WireGuard, public IPs, hosted LLMs, policies P1/P2, ATT&CK dashboards. Those belong in later phases. Opening SSH authentication requires the nineteen-property gate in the design record — this lab is how you start demonstrating the isolation properties, not a waiver of that gate.
+Suricata, SSH login into a shell, Kubernetes, WireGuard, public IPs, hosted LLMs, policies P1/P2. Opening authentication still requires the nineteen-property gate.
 
-Event schema: `config/event-schema.json`. Identity is `ip:<address>` until Zeek HASSH/JA4 exist.
+Event schema: `config/event-schema.json`.
 
 ## Safety
 
-- Networks are `internal: true` (no NAT to the real internet).
-- Sandbox drops all capabilities and cannot get new privileges.
+- Networks are `internal: true`.
+- Sandbox drops all capabilities.
 - Sinkhole never originates outbound connections.
-- If you change `ports:` to `0.0.0.0`, you have left the local-lab contract. Do not do that.
+- If you change `ports:` to `0.0.0.0`, you have left the local-lab contract.

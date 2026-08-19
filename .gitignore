@@ -27,6 +27,9 @@ data/events/*.jsonl
 data/events/*.jsonl.*
 data/manifests/current.json
 data/manifests/current.json.tmp
+data/zeek/*.log
+data/zeek/*.log.*
+data/zeek/*.json
 
 # Compose local overrides (often contain host-only bind paths)
 compose.override.yml

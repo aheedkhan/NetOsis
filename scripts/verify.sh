@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Prove Scope A: surfaces on localhost, events in the log, sandbox isolated, sinkhole works.
+# Scope B: Scope A checks, plus KEX-refused SSH, HTTPS, Zeek fingerprints.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FAILS=0
 
 ok() { printf '  OK    %s\n' "$*"; }
@@ -34,19 +33,34 @@ else
   bad "HTTP login expected 401, got ${LOGIN:-none}"
 fi
 
+HTTPS_BODY="$(curl -skf --max-time 5 https://127.0.0.1:8443/ || true)"
+if printf '%s' "$HTTPS_BODY" | grep -q NexusCorp; then
+  ok "HTTPS portal on 127.0.0.1:8443"
+else
+  bad "HTTPS portal did not respond"
+fi
+
 BANNER="$(python3 - <<'PY'
 import socket
 s = socket.create_connection(("127.0.0.1", 2222), timeout=3)
-s.sendall(b"SSH-2.0-OpenSSH_9.8-labprobe\r\n")
+s.settimeout(3)
 data = s.recv(256)
 s.close()
-print(data.decode("latin1", errors="replace").strip())
+print(data.decode("latin1", errors="replace").strip().splitlines()[0])
 PY
 )"
 if printf '%s' "$BANNER" | grep -q 'SSH-2.0-OpenSSH'; then
   ok "SSH banner on 127.0.0.1:2222 (${BANNER})"
 else
-  bad "SSH banner missing"
+  bad "SSH banner missing (${BANNER})"
+fi
+
+SSH_OUT="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o ConnectTimeout=5 -p 2222 nobody@127.0.0.1 true 2>&1 || true)"
+if printf '%s' "$SSH_OUT" | grep -Eqi 'permission denied|authentication failed'; then
+  ok "SSH KEX completed and auth refused"
+else
+  bad "SSH KEX/auth check failed (${SSH_OUT})"
 fi
 
 echo "== isolation (sandbox must not reach mgmt or the internet) =="
@@ -75,31 +89,50 @@ else
   bad "HTTP sinkhole fetch failed"
 fi
 
+echo "== waiting for Zeek flush =="
+sleep 4
+
 echo "== telemetry =="
-MISSING_RC=0
 python3 - <<'PY'
 import json, sys, urllib.request
-raw = urllib.request.urlopen("http://127.0.0.1:18088/v1/tail?n=50", timeout=3).read()
+raw = urllib.request.urlopen("http://127.0.0.1:18088/v1/tail?n=200", timeout=5).read()
 data = json.loads(raw)
-datasets = {e.get("event", {}).get("dataset") for e in data.get("lines", [])}
+lines = data.get("lines", [])
+datasets = {e.get("event", {}).get("dataset") for e in lines}
 needed = {
-    "cybersnare.ssh.banner",
     "cybersnare.http.request",
     "cybersnare.sinkhole.dns",
     "cybersnare.sinkhole.http",
 }
 missing = sorted(needed - datasets)
 open("/tmp/cs-verify-missing", "w").write("\n".join(missing))
+zeekish = {d for d in datasets if d and d.startswith("cybersnare.zeek.")}
+open("/tmp/cs-verify-zeek", "w").write("\n".join(sorted(zeekish)))
+fp = False
+for e in lines:
+    net = e.get("network") or {}
+    if net.get("hassh") or net.get("ja4"):
+        fp = True
+        break
+open("/tmp/cs-verify-fp", "w").write("yes" if fp else "no")
 sys.exit(1 if missing else 0)
 PY
 MISSING_RC=$?
 if [ "$MISSING_RC" -eq 0 ]; then
-  ok "JSONL has SSH, HTTP, DNS and HTTP-sinkhole events"
-elif [ "$MISSING_RC" -eq 2 ]; then
-  bad "could not read event tail"
+  ok "JSONL has HTTP and sinkhole events"
 else
   miss="$(cat /tmp/cs-verify-missing 2>/dev/null | tr '\n' ' ')"
   bad "missing datasets: ${miss}"
+fi
+if [ -s /tmp/cs-verify-zeek ]; then
+  ok "JSONL has Zeek datasets ($(tr '\n' ' ' </tmp/cs-verify-zeek))"
+else
+  bad "no cybersnare.zeek.* events in the log"
+fi
+if [ "$(cat /tmp/cs-verify-fp 2>/dev/null)" = "yes" ]; then
+  ok "at least one event carries HASSH or JA4"
+else
+  bad "no network.hassh or network.ja4 in recent events"
 fi
 
 if curl -sf --max-time 3 http://127.0.0.1:19000/v1/manifest | grep -q 'p0-static-v1'; then
@@ -110,7 +143,7 @@ fi
 
 echo
 if [ "$FAILS" -eq 0 ]; then
-  echo "Scope A lab is up."
+  echo "Scope B lab is up."
   exit 0
 fi
 echo "$FAILS check(s) failed."

@@ -4,7 +4,7 @@ COMPOSE = podman compose
 
 up:
 	systemctl --user start podman.socket
-	mkdir -p data/events data/manifests
+	mkdir -p data/events data/manifests data/zeek
 	$(COMPOSE) up -d --build
 
 down:
@@ -12,7 +12,7 @@ down:
 
 rebuild:
 	systemctl --user start podman.socket
-	mkdir -p data/events data/manifests
+	mkdir -p data/events data/manifests data/zeek
 	$(COMPOSE) up -d --build --force-recreate
 
 ps:

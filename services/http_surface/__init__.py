@@ -1,11 +1,13 @@
-"""Observe-only HTTP surface. Fake portal. Login always fails. Auth is closed."""
+"""Observe-only HTTP/HTTPS surface. Fake portal. Login always fails. Auth is closed."""
 
 from __future__ import annotations
 
 import asyncio
 import html
 import os
+import ssl
 import uuid
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs
 
 from cs.events import new_event
@@ -14,7 +16,8 @@ from cs.tinyhttp import json_body, wait_http, serve
 
 BIND = os.environ.get("CS_BIND", "0.0.0.0")
 PORT = int(os.environ.get("CS_PORT", "8080"))
-DEST_IP = os.environ.get("CS_SELF_IP", "10.200.2.11")
+HTTPS_PORT = int(os.environ.get("CS_HTTPS_PORT", "8443"))
+DEST_IP = os.environ.get("CS_SELF_IP", "10.200.2.10")
 LOGGER_HOST = os.environ.get("CS_LOGGER_HOST", "10.200.1.10")
 LOGGER_PORT = int(os.environ.get("CS_LOGGER_PORT", "8088"))
 PERSONA = os.environ.get("CS_HTTP_PERSONA", "NexusCorp Employee Portal")
@@ -37,8 +40,11 @@ PAGE = f"""<!DOCTYPE html>
 
 def emit_http(req: dict, action: str, user_name: str | None = None) -> None:
     peer = req.get("peer") or (None, None)
+    local = req.get("local") or (None, None)
     src_ip = peer[0] if peer else None
     src_port = peer[1] if isinstance(peer, tuple) and len(peer) > 1 else None
+    dest_port = local[1] if isinstance(local, tuple) and len(local) > 1 else PORT
+    tls = bool(req.get("tls"))
     headers = req.get("headers") or {}
     ua = headers.get("user-agent")
     event = new_event(
@@ -49,8 +55,8 @@ def emit_http(req: dict, action: str, user_name: str | None = None) -> None:
         source_ip=src_ip,
         source_port=src_port,
         dest_ip=DEST_IP,
-        dest_port=PORT,
-        dest_service="http",
+        dest_port=dest_port,
+        dest_service="https" if tls else "http",
         session_id=str(uuid.uuid4()),
         user_name=user_name,
         ua_signature=ua,
@@ -66,7 +72,8 @@ def emit_http(req: dict, action: str, user_name: str | None = None) -> None:
                     "path": req.get("path"),
                     "header_order": req.get("header_order"),
                 }
-            }
+            },
+            "tls": {"established": tls},
         },
     )
     emit_bg(event)
@@ -106,11 +113,51 @@ async def handler(req: dict) -> tuple[int, dict[str, str], bytes]:
     return 404, {"Content-Type": "text/plain"}, b"not found\n"
 
 
+def lab_ssl_context() -> ssl.SSLContext:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "portal.nexuscorp.lab")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=365))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), False)
+        .sign(key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    key_pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    )
+    cert_path = "/tmp/cs-lab.crt"
+    key_path = "/tmp/cs-lab.key"
+    with open(cert_path, "wb") as fh:
+        fh.write(cert_pem)
+    with open(key_path, "wb") as fh:
+        fh.write(key_pem)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert_path, key_path)
+    return ctx
+
+
 async def main() -> None:
     await wait_http(LOGGER_HOST, LOGGER_PORT, "/health")
-    server = await serve(BIND, PORT, handler, name="http-surface")
-    async with server:
-        await server.serve_forever()
+    http = await serve(BIND, PORT, handler, name="http-surface")
+    https = await serve(
+        BIND, HTTPS_PORT, handler, name="https-surface", ssl=lab_ssl_context()
+    )
+    async with http, https:
+        await asyncio.gather(http.serve_forever(), https.serve_forever())
 
 
 if __name__ == "__main__":

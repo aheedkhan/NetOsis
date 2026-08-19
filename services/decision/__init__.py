@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 
+from cs.actors import ActorMap
 from cs.tinyhttp import json_body, serve
 
 BIND = os.environ.get("CS_BIND", "0.0.0.0")
@@ -14,6 +15,7 @@ PORT = int(os.environ.get("CS_PORT", "9000"))
 SEED = Path(os.environ.get("CS_MANIFEST_SEED", "/config/manifest-p0.json"))
 CURRENT = Path(os.environ.get("CS_MANIFEST_CURRENT", "/data/manifests/current.json"))
 
+actors = ActorMap()
 belief: dict[str, dict] = {}
 last_event: dict | None = None
 seen = 0
@@ -35,23 +37,24 @@ def apply_p0(event: dict) -> dict:
     global last_event, seen
     seen += 1
     last_event = event
-    actor = event.get("session", {}).get("actor_key", "actor:unknown")
-    slot = belief.setdefault(
-        actor,
-        {
-            "actor_key": actor,
-            "events": 0,
-            "capability": "unknown",
-            "intent": None,
-            "level": "L1",
-        },
+    rec = actors.resolve(event)
+    rec["events"] = int(rec.get("events") or 0) + 1
+    rec["last_dataset"] = event.get("event", {}).get("dataset")
+    rec["last_seen"] = event.get("@timestamp")
+    actor = rec["actor_key"]
+    belief[actor] = rec
+    # Drop stale keys that were merged away.
+    for stale in [k for k in belief if k not in actors.actors]:
+        belief.pop(stale, None)
+    event.setdefault("session", {})["actor_key"] = actor
+    event.setdefault("cybersnare", {})["linkage_confidence"] = rec.get(
+        "linkage_confidence"
     )
-    slot["events"] += 1
-    slot["last_dataset"] = event.get("event", {}).get("dataset")
-    slot["last_seen"] = event.get("@timestamp")
     manifest = load_seed()
     manifest["generated_at"] = event.get("@timestamp")
     manifest["actor_key"] = actor
+    manifest["linked_ips"] = rec.get("linked_ips")
+    manifest["linkage_confidence"] = rec.get("linkage_confidence")
     manifest["events_seen"] = seen
     persist(manifest)
     return manifest

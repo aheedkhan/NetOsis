@@ -96,14 +96,18 @@ async def serve(
     handler: Handler,
     *,
     name: str = "http",
+    ssl: Any = None,
 ) -> asyncio.AbstractServer:
     async def _client(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         peer = writer.get_extra_info("peername")
+        local = writer.get_extra_info("sockname")
         try:
             req = await read_request(reader)
             req["peer"] = peer
+            req["local"] = local
+            req["tls"] = ssl is not None
             status, headers, body = await handler(req)
             await write_response(writer, status, headers, body)
         except asyncio.TimeoutError:
@@ -128,7 +132,7 @@ async def serve(
             except Exception:
                 pass
 
-    server = await asyncio.start_server(_client, host, port)
+    server = await asyncio.start_server(_client, host, port, ssl=ssl)
     print(f"{name} listening on {host}:{port}", flush=True)
     return server
 

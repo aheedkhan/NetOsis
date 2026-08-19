@@ -18,6 +18,11 @@
       "auth": "closed",
       "persona": "NexusCorp Employee Portal"
     },
+    "https": {
+      "exposed": true,
+      "listen": "0.0.0.0:8443",
+      "auth": "closed"
+    },
     "shell": {
       "exposed": false,
       "reason": "Authentication gate not passed. Nineteen properties are not yet demonstrated."
@@ -26,6 +31,11 @@
       "exposed": true,
       "stage": 0,
       "behaviour": "DNS and HTTP answered locally. Nothing reaches a real network."
+    },
+    "sensor": {
+      "exposed": true,
+      "kind": "lab-tap",
+      "note": "Zeek shares the deception netns with SSH/HTTP so it can see KEX and TLS ClientHello. Not a second addressable monitor."
     }
   }
 }

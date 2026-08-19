@@ -29,10 +29,22 @@ def utcnow() -> str:
 
 
 def actor_key_from_ip(ip: str | None) -> str:
-    """v0 linkage: address only. Zeek HASSH/JA4 replace this in P1."""
+    """Fallback identity. Decision-plane ActorMap upgrades this when HASSH/JA4 arrive."""
     if not ip:
         return "actor:unknown"
     return f"ip:{ip}"
+
+
+def actor_key_from_fingerprints(
+    *,
+    hassh: str | None = None,
+    ja4: str | None = None,
+    ip: str | None = None,
+) -> str:
+    from cs.actors import pick_actor_key
+
+    key, _confidence = pick_actor_key(hassh=hassh, ja4=ja4, ip=ip)
+    return key
 
 
 def new_event(
@@ -69,7 +81,8 @@ def new_event(
         },
         "session": {
             "id": session_id,
-            "actor_key": actor_key or actor_key_from_ip(source_ip),
+            "actor_key": actor_key
+            or actor_key_from_fingerprints(hassh=hassh, ja4=ja4, ip=source_ip),
             "arm": ARM,
             "level": LEVEL,
         },
