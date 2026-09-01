@@ -1,5 +1,7 @@
 # CyberSnare local lab
 
+![NetOsis](docs/archture__tech.png)
+
 A full simulated organisation — **NexusCorp Industrial Systems** — running entirely
 in containers on one machine: a perimeter firewall, a DMZ with real TLS-terminated
 services, a corporate LAN, a protected datacenter, and a deception zone behind
