@@ -1783,3 +1783,83 @@
 .actor-row-clickable:hover {
   background: rgba(10, 132, 255, 0.06);
 }
+
+.sys-panel {
+  margin-bottom: 1.25rem;
+}
+
+.sys-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.sys-meter-row {
+  gap: 0.35rem;
+}
+
+.sys-meter-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-transform: none;
+}
+
+.sys-temps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sys-temps-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sys-temps-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 0.9rem;
+}
+
+.sys-temp-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sys-temp-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sys-temp-label {
+  font-size: 0.7rem;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-temp-val {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.sys-temp-track {
+  height: 4px;
+}
+
+@media (max-width: 900px) {
+  .sys-grid {
+    grid-template-columns: 1fr;
+  }
+}

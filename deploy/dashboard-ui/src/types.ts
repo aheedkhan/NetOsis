@@ -309,3 +309,29 @@ export type OperationMap = {
   edges: OperationEdge[];
   phase_counts: Record<string, number>;
 };
+
+export type SystemGpu = {
+  name: string;
+  util_percent: number;
+  mem_used_mb: number;
+  mem_total_mb: number;
+  temp_c: number;
+};
+
+export type SystemTemperature = {
+  label: string;
+  chip: string;
+  temp_c: number;
+};
+
+export type SystemMetrics = {
+  available?: false;
+  timestamp: number;
+  hostname: string;
+  uptime_s: number;
+  cpu: { percent: number | null; cores: number; load_avg: number[] };
+  memory: { total_mb: number; used_mb: number; percent: number | null };
+  disk: { path: string; total_gb: number; used_gb: number; percent: number | null };
+  gpu: SystemGpu[] | null;
+  temperatures: SystemTemperature[] | null;
+};

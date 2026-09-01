@@ -25,6 +25,7 @@ from cs.tinyhttp import serve
 
 LOG_PATH = Path(os.environ.get("CS_LOG_PATH", "/data/events.jsonl"))
 DASHBOARD = Path(os.environ.get("CS_DASHBOARD_DIR", "/dashboard"))
+METRICS_PATH = Path(os.environ.get("CS_METRICS_PATH", "/metrics/system.json"))
 DECISION_HOST = os.environ.get("CS_DECISION_HOST", "10.200.1.11")
 DECISION_PORT = int(os.environ.get("CS_DECISION_PORT", "9000"))
 EVENT_TAIL = int(os.environ.get("CS_EVENT_TAIL", "15000"))
@@ -122,6 +123,16 @@ async def handler(req: dict) -> tuple[int, dict[str, str], bytes]:
     if method == "GET" and path.startswith("/v1/profile/"):
         actor_key = unquote(path.removeprefix("/v1/profile/").strip("/"))
         return _json(actor_profile(_events(), actor_key))
+    if method == "GET" and path == "/v1/system":
+        # Host resource usage — ops visibility into the lab machine itself,
+        # not attacker telemetry. scripts/host-metrics.py (runs on the host,
+        # outside every container) writes this file every couple of seconds;
+        # read fresh each request rather than caching, since it's tiny and
+        # staleness would defeat the point of a "live" panel.
+        try:
+            return _json(json.loads(METRICS_PATH.read_text()))
+        except (OSError, json.JSONDecodeError):
+            return _json({"available": False})
     return 404, {"Content-Type": "text/plain"}, b"not found\n"
 
 

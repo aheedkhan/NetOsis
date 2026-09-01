@@ -455,10 +455,12 @@ services:
       CS_DECISION_PORT: "9000"
       CS_TOPOLOGY: "/config/topology.json"
       CS_EVENT_TAIL: "15000"
+      CS_METRICS_PATH: "/metrics/system.json"
     volumes:
       - ./data/events:/data:ro,z
       - ./config:/config:ro,z
       - ./deploy/dashboard:/dashboard:ro,z
+      - ./data/metrics:/metrics:ro,z
     networks:
       mgmt:
         ipv4_address: 10.200.1.14

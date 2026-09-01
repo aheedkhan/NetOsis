@@ -11,9 +11,11 @@ import { LiveLogStream } from "./components/LiveLogStream";
 import { NetworkMap } from "./components/NetworkMap";
 import { SiemBarChart } from "./components/SiemBarChart";
 import { StatsGrid } from "./components/StatsGrid";
+import { SystemUsagePanel } from "./components/SystemUsagePanel";
 import { Timeline } from "./components/Timeline";
 import { VisualsSection } from "./sections/VisualsSection";
 import { useDashboard } from "./useDashboard";
+import { useSystemMetrics } from "./useSystemMetrics";
 import { useTopology } from "./useTopology";
 import { CHART } from "./charts/theme";
 import "./App.css";
@@ -118,6 +120,7 @@ export default function App() {
   const [section, setSection] = useState<AppSection>("overview");
   const { data, loading, error, lastRefresh, refresh } = useDashboard();
   const topology = useTopology(true);
+  const systemMetrics = useSystemMetrics(true);
   const [pendingActor, setPendingActor] = useState<string | undefined>();
 
   // Clicking an actor anywhere in the SOC view (the map, a table row) jumps
@@ -162,6 +165,8 @@ export default function App() {
             {section === "overview" && (
               <>
                 <StatsGrid report={data.report} />
+
+                <SystemUsagePanel metrics={systemMetrics.data} error={systemMetrics.error} />
 
                 <div className="siem-row siem-row-hero">
                   <Panel title="Event throughput" subtitle="Stacked volume by telemetry family (5-min buckets)" badge="time series" className="span-2">

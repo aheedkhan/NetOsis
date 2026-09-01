@@ -32,6 +32,8 @@ data/zeek/*.log.*
 data/zeek/*.json
 data/collection/
 data/milestone1-report.json
+data/metrics/*.json
+data/metrics/*.tmp
 
 # Compose local overrides (often contain host-only bind paths)
 compose.override.yml

@@ -40,6 +40,7 @@ what is deliberately deferred, and what is **out of scope** for milestone 1.
 | Item | Status |
 |------|--------|
 | Intelligence service + dashboard | **Done** — `http://127.0.0.1:18090/` |
+| Live host-resource panel (CPU/RAM/disk/GPU/temps) | **Done** — `scripts/host-metrics.py` (host-side, `/v1/system`), 2s refresh in-dashboard |
 | ATT&CK/Engage enrichment | **Done** — `lib/cs/mappings.py`, `lib/cs/intelligence.py` |
 | Pre-registration + analysis plan | **Done** — `docs/milestone1/` |
 | Red-team profiles | **Done** — `./cs redteam` |
