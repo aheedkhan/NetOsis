@@ -1,0 +1,14 @@
+# cs-edge WireGuard client — copy to /etc/wireguard/wg0.conf
+# Generate keys: wg genkey | tee privatekey | wg pubkey > publickey
+# cs-lab is the WireGuard "server" peer at 10.250.0.2
+
+[Interface]
+Address = 10.250.0.1/24
+PrivateKey = EDGE_PRIVATE_KEY_HERE
+MTU = 1420
+
+[Peer]
+PublicKey = LAB_PUBLIC_KEY_HERE
+Endpoint = LAB_PUBLIC_IP:51820
+AllowedIPs = 10.250.0.0/24, 10.200.0.0/16
+PersistentKeepalive = 25

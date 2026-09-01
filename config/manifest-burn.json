@@ -1,0 +1,17 @@
+{
+  "manifest_id": "burn-v1",
+  "policy": "P1",
+  "arm": "B",
+  "level": "BURN",
+  "rationale": "BURN: suspicion high — freeze capabilities, harvest evidence, allow disengage.",
+  "engage_activity": "EAC0009",
+  "capabilities": {
+    "ssh": { "exposed": false },
+    "http": { "exposed": false },
+    "https": { "exposed": false },
+    "shell": { "exposed": false, "reason": "BURN terminal." },
+    "sinkhole": { "exposed": true, "stage": 0 },
+    "sensor": { "exposed": true, "kind": "zeek" },
+    "internal_net": { "exposed": false }
+  }
+}

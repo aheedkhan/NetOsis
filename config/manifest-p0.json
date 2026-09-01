@@ -3,7 +3,7 @@
   "policy": "P0",
   "arm": "A",
   "level": "L1",
-  "rationale": "Scope-A lab: static attract surface. Authentication is closed. No shell. Capabilities are pre-staged and do not change with scoring.",
+  "rationale": "Static attract surface (P0). Authentication is closed. No shell. Capabilities are pre-staged and do not change with scoring.",
   "engage_activity": "EAC0003",
   "capabilities": {
     "ssh": {
@@ -13,15 +13,14 @@
       "banner": "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13"
     },
     "http": {
-      "exposed": true,
-      "listen": "0.0.0.0:8080",
-      "auth": "closed",
-      "persona": "NexusCorp Employee Portal"
+      "exposed": false,
+      "reason": "Plaintext HTTP disabled. HTTPS-only posture."
     },
     "https": {
       "exposed": true,
       "listen": "0.0.0.0:8443",
-      "auth": "closed"
+      "auth": "closed",
+      "persona": "NexusCorp Secure Access"
     },
     "shell": {
       "exposed": false,

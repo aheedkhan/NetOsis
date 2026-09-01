@@ -1,0 +1,10 @@
+# One-shot verifier: curl, openssh-client, python — no host packages needed.
+FROM alpine:3.21
+
+RUN apk add --no-cache bash curl openssh-client python3
+
+WORKDIR /verify
+COPY scripts/verify-inner.sh /verify/verify-inner.sh
+RUN chmod +x /verify/verify-inner.sh
+
+ENTRYPOINT ["/verify/verify-inner.sh"]

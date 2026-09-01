@@ -1,0 +1,44 @@
+{
+  "manifest_id": "l1-attract-v1",
+  "policy": "P0",
+  "arm": "A",
+  "level": "L1",
+  "rationale": "L1 Attract: deception surfaces exposed, authentication closed.",
+  "engage_activity": "EAC0003",
+  "capabilities": {
+    "ssh": {
+      "exposed": true,
+      "listen": "0.0.0.0:2222",
+      "auth": "closed",
+      "banner": "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13"
+    },
+    "http": {
+      "exposed": false,
+      "reason": "Plaintext HTTP disabled. HTTPS-only posture."
+    },
+    "https": {
+      "exposed": true,
+      "listen": "0.0.0.0:8443",
+      "auth": "closed",
+      "persona": "NexusCorp Secure Access"
+    },
+    "shell": {
+      "exposed": false,
+      "reason": "Authentication gate not passed."
+    },
+    "sinkhole": {
+      "exposed": true,
+      "stage": 0,
+      "behaviour": "DNS and HTTP answered locally."
+    },
+    "sensor": {
+      "exposed": true,
+      "kind": "zeek",
+      "note": "HASSH/JA4 on deception traffic."
+    },
+    "internal_net": {
+      "exposed": false,
+      "reason": "L3 not active."
+    }
+  }
+}

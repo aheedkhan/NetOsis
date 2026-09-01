@@ -2,7 +2,7 @@ FROM zeek/zeek:7.0
 
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tcpdump \
+    && apt-get install -y --no-install-recommends tcpdump iproute2 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /site /zeek/logs
 

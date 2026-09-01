@@ -1,0 +1,33 @@
+FROM docker.io/kalilinux/kali-rolling
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        openssh-server \
+        curl \
+        nmap \
+        sshpass \
+        netcat-traditional \
+        iproute2 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd /opt/cs \
+    && ssh-keygen -A \
+    && useradd -m -s /bin/bash kali \
+    && echo 'kali:kali' | chpasswd \
+    && echo 'PermitRootLogin no' >> /etc/ssh/sshd_config \
+    && echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config \
+    && echo 'UsePAM no' >> /etc/ssh/sshd_config
+
+COPY scripts/attacker-auto.sh /opt/cs/attacker-auto.sh
+COPY scripts/human-session.sh /opt/cs/human-session.sh
+COPY containers/attacker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /opt/cs/attacker-auto.sh /opt/cs/human-session.sh /entrypoint.sh
+
+EXPOSE 22
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+CMD ["/entrypoint.sh"]

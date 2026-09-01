@@ -1,0 +1,22 @@
+{
+  "manifest_id": "block-v1",
+  "policy": "P1",
+  "arm": "B",
+  "level": "BLOCK",
+  "rationale": "BLOCK: actor classified as an automated tool with high confidence. Every deception capability is withdrawn and the source is dropped at the perimeter, because there is nothing further to learn and serving it costs resources that a human operator could be using.",
+  "engage_activity": "EAC0009",
+  "capabilities": {
+    "ssh": { "exposed": false, "reason": "BLOCK terminal — automated actor." },
+    "http": { "exposed": false },
+    "https": { "exposed": false, "reason": "BLOCK terminal — automated actor." },
+    "shell": { "exposed": false, "reason": "BLOCK terminal — never opened for automation." },
+    "sinkhole": { "exposed": true, "stage": 0 },
+    "sensor": { "exposed": true, "kind": "zeek" },
+    "internal_net": { "exposed": false }
+  },
+  "actuation": {
+    "firewall_block": true,
+    "ttl_s": 21600,
+    "note": "The decision plane posts the source address to the fw_agent blocklist on both firewalls. Subsequent packets cost one nftables set lookup."
+  }
+}

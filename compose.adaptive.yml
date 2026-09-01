@@ -1,0 +1,34 @@
+# Adaptive arm overlay — P1 policy + GNN scoring enabled.
+x-python: &python
+  image: localhost/cybersnare-python:lab
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: containers/Dockerfile.python
+
+services:
+  decision:
+    environment:
+      CS_POLICY: P1
+      CS_GNN_ENABLED: "1"
+
+  intent_worker:
+    <<: *python
+    container_name: cs-intent
+    hostname: intent-worker
+    command: ["python", "-m", "services.intent_worker"]
+    environment:
+      CS_LOG_PATH: "/data/events.jsonl"
+      CS_DECISION_HOST: "10.200.1.11"
+      CS_DECISION_PORT: "9000"
+      CS_INTENT_INTERVAL: "5"
+      CS_LLM_ENABLED: "0"
+    volumes:
+      - ./data/events:/data:z
+    networks:
+      mgmt:
+        ipv4_address: 10.200.1.13
+    depends_on:
+      logger:
+        condition: service_healthy
+    restart: unless-stopped

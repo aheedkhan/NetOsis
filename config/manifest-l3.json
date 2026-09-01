@@ -1,0 +1,46 @@
+{
+  "manifest_id": "l3-immerse-v1",
+  "policy": "P2",
+  "arm": "C",
+  "level": "L3",
+  "rationale": "L3 Immerse: internal network hop, credential material, richer filesystem.",
+  "engage_activity": "EAC0007",
+  "capabilities": {
+    "ssh": {
+      "exposed": true,
+      "listen": "0.0.0.0:2222",
+      "auth": "open",
+      "banner": "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13",
+      "shell": "restricted"
+    },
+    "http": {
+      "exposed": false,
+      "reason": "Plaintext HTTP disabled. HTTPS-only posture."
+    },
+    "https": {
+      "exposed": true,
+      "listen": "0.0.0.0:8443",
+      "auth": "open",
+      "persona": "NexusCorp Secure Access"
+    },
+    "shell": {
+      "exposed": true,
+      "runtime": "sandbox",
+      "restrictions": ["no_mgmt", "egress_sinkhole_only", "seccomp"],
+      "filesystem": "populated-l3"
+    },
+    "sinkhole": {
+      "exposed": true,
+      "stage": 0
+    },
+    "sensor": {
+      "exposed": true,
+      "kind": "zeek"
+    },
+    "internal_net": {
+      "exposed": true,
+      "services": ["ldap-mock", "gitlab-mirror", "file-share-decoy"],
+      "note": "Second-hop internal realism — all fake, no real org data."
+    }
+  }
+}

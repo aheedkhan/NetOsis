@@ -1,0 +1,44 @@
+{
+  "manifest_id": "l2-engage-v1",
+  "policy": "P1",
+  "arm": "B",
+  "level": "L2",
+  "rationale": "L2 Engage: authentication succeeds into restricted disposable shell.",
+  "engage_activity": "EAC0005",
+  "capabilities": {
+    "ssh": {
+      "exposed": true,
+      "listen": "0.0.0.0:2222",
+      "auth": "open",
+      "banner": "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13",
+      "shell": "restricted"
+    },
+    "http": {
+      "exposed": false,
+      "reason": "Plaintext HTTP disabled. HTTPS-only posture."
+    },
+    "https": {
+      "exposed": true,
+      "listen": "0.0.0.0:8443",
+      "auth": "open",
+      "persona": "NexusCorp Secure Access"
+    },
+    "shell": {
+      "exposed": true,
+      "runtime": "sandbox",
+      "restrictions": ["no_mgmt", "egress_sinkhole_only", "seccomp"]
+    },
+    "sinkhole": {
+      "exposed": true,
+      "stage": 0
+    },
+    "sensor": {
+      "exposed": true,
+      "kind": "zeek"
+    },
+    "internal_net": {
+      "exposed": false,
+      "reason": "L3 immerse not yet warranted."
+    }
+  }
+}

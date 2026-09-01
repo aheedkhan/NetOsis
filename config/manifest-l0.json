@@ -1,0 +1,16 @@
+{
+  "manifest_id": "l0-observe-v1",
+  "policy": "P0",
+  "arm": "A",
+  "level": "L0",
+  "rationale": "L0 Observe: sensing only. Deception surfaces hidden.",
+  "engage_activity": "EAC0001",
+  "capabilities": {
+    "ssh": { "exposed": false },
+    "http": { "exposed": false },
+    "https": { "exposed": false },
+    "shell": { "exposed": false, "reason": "L0 observe mode." },
+    "sinkhole": { "exposed": true, "stage": 0 },
+    "sensor": { "exposed": true, "kind": "zeek" }
+  }
+}

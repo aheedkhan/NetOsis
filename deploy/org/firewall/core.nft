@@ -1,0 +1,161 @@
+#!/usr/sbin/nft -f
+#
+# cs-core-fw — NexusCorp internal segmentation firewall.
+#
+# Sits behind the perimeter and separates four zones that a real organisation
+# would never place on one flat network:
+#
+#   transit     172.31.99.0/24  link to the perimeter firewall
+#   corp        10.10.20.0/24   user LAN: dc01, fs01, erp01, wks01
+#   datacenter  10.10.30.0/24   db01, bkp01 — the crown jewels
+#   deception   10.200.2.0/24   the CyberSnare surfaces
+#
+# Two invariants are enforced here and are the reason this firewall exists
+# rather than being folded into the perimeter:
+#
+#   1. The deception zone can never reach the datacenter. An adversary who
+#      fully owns the honeypot still cannot touch real data.
+#   2. The deception zone can never reach the Internet directly. Egress from
+#      the deception plane goes to the sinkhole on the egress bridge, which is
+#      not attached to this firewall at all.
+#
+# Interface names are substituted at boot by firewall-entrypoint.sh.
+
+flush ruleset
+
+table inet cs_core {
+
+    # ---- east-west evidence -------------------------------------------------
+    set lateral_accept {
+        type ipv4_addr . ipv4_addr . inet_service
+        flags dynamic,timeout
+        timeout 1h
+        size 8192
+        counter
+    }
+
+    set lateral_drop {
+        type ipv4_addr . ipv4_addr . inet_service
+        flags dynamic,timeout
+        timeout 1h
+        size 8192
+        counter
+    }
+
+    # Attempts to leave the deception zone for somewhere it must never go.
+    # Every hit here is a containment event, not merely a dropped packet.
+    set containment_violation {
+        type ipv4_addr . ipv4_addr . inet_service
+        flags dynamic,timeout
+        timeout 24h
+        size 4096
+        counter
+    }
+
+    # ---- decision-plane blocklist ------------------------------------------
+    # Populated over the fw_agent API by the decision plane. When an actor is
+    # classified as an automated tool with enough confidence there is nothing
+    # further to learn from it, so it is dropped here at the boundary rather
+    # than being served by a deception surface. Every packet a scanner sends
+    # after this point costs one nftables set lookup and nothing else.
+    set blocked {
+        type ipv4_addr
+        flags dynamic,timeout
+        timeout 6h
+        size 4096
+        counter
+    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        ip saddr @blocked drop
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        icmp type echo-request limit rate 10/second accept
+        iifname "@IF_MGMT@" tcp dport 9400 accept
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+
+        ip saddr @blocked drop
+        ct state invalid drop
+        ct state established,related accept
+
+        # ---- CONTAINMENT — evaluated before anything else -------------------
+        # These four rules are the safety boundary. They are first so that no
+        # later rule can accidentally shadow them.
+
+        # The deception zone may not reach real data.
+        iifname "@IF_DECEPTION@" oifname "@IF_DATACENTER@" meta l4proto { tcp, udp } \
+            update @containment_violation { ip saddr . ip daddr . th dport } drop
+        iifname "@IF_DECEPTION@" oifname "@IF_DATACENTER@" drop
+
+        # The deception zone may not reach the Internet through this firewall.
+        iifname "@IF_DECEPTION@" oifname "@IF_TRANSIT@" meta l4proto { tcp, udp } \
+            update @containment_violation { ip saddr . ip daddr . th dport } drop
+        iifname "@IF_DECEPTION@" oifname "@IF_TRANSIT@" drop
+
+        # ---- inbound to the deception surface --------------------------------
+        # Forwarded from the perimeter with the adversary's source address
+        # still intact.
+        iifname "@IF_TRANSIT@" oifname "@IF_DECEPTION@" meta l4proto { tcp, udp } \
+            update @lateral_accept { ip saddr . ip daddr . th dport } accept
+        iifname "@IF_TRANSIT@" oifname "@IF_DECEPTION@" accept
+
+        # ---- the lateral movement path ---------------------------------------
+        # An adversary who reaches a shell on the deception host can see part of
+        # the corporate LAN. Everything reachable this way is a decoy, and every
+        # packet is counted. This is the L3 "internal hop" the design record
+        # describes, implemented as a firewall policy rather than a fiction.
+        iifname "@IF_DECEPTION@" oifname "@IF_CORP@" \
+            tcp dport { 80, 139, 389, 445, 3389 } \
+            update @lateral_accept { ip saddr . ip daddr . th dport } accept
+
+        iifname "@IF_DECEPTION@" oifname "@IF_CORP@" icmp type echo-request accept
+
+        # Any other attempt out of the deception zone into corp is recorded and
+        # dropped — it tells us what the adversary wanted that we did not offer.
+        iifname "@IF_DECEPTION@" oifname "@IF_CORP@" meta l4proto { tcp, udp } \
+            update @lateral_drop { ip saddr . ip daddr . th dport } drop
+
+        # ---- ordinary business traffic ---------------------------------------
+        # Workstations and the ERP host reach the database tier; this is the
+        # benign background the scoring plane must learn to ignore.
+        iifname "@IF_CORP@" oifname "@IF_DATACENTER@" \
+            tcp dport { 1433, 3306, 5432, 445 } accept
+        iifname "@IF_CORP@" oifname "@IF_DATACENTER@" accept
+
+        iifname "@IF_DATACENTER@" oifname "@IF_CORP@" ct state new accept
+
+        # Corp may browse out through the perimeter.
+        iifname "@IF_CORP@" oifname "@IF_TRANSIT@" accept
+
+        # Perimeter may reach published corp services (none by default, but the
+        # path exists so the topology is honest about what a rule change costs).
+        iifname "@IF_TRANSIT@" oifname "@IF_CORP@" ct status dnat accept
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}
+
+table ip cs_core_nat {
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+
+        # Corp and datacenter hosts are stock images with a single default
+        # route to their own bridge, so traffic arriving from another zone is
+        # source-NATed to this firewall's address in the destination zone.
+        oifname "@IF_CORP@"       ip saddr != 10.10.20.0/24 snat to 10.10.20.2
+        oifname "@IF_DATACENTER@" ip saddr != 10.10.30.0/24 snat to 10.10.30.2
+
+        # Deliberately absent: any rule touching the deception zone. Actor
+        # identity is derived from the observed source address, so it is
+        # carried through unmodified.
+    }
+}

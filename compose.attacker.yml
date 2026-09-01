@@ -1,0 +1,65 @@
+# Attacker overlay — Kali on the OUTSIDE.
+#
+# The attacker is attached to the simulated Internet bridge only. It has no leg
+# on the deception, corp, dmz or egress networks, so every packet it sends to
+# NexusCorp has to be accepted by a rule on the perimeter firewall first. That
+# is the difference between a honeypot demo and an experiment: recon telemetry
+# only means something if the recon actually had to cross a boundary.
+#
+# Host SSH into Kali:  ssh -p 2220 kali@127.0.0.1   (password: kali)
+services:
+  attacker:
+    image: localhost/cybersnare-attacker:lab
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: containers/Dockerfile.attacker
+    container_name: cs-attacker
+    hostname: kali-attacker
+    environment:
+      # The public address block, as the adversary discovers it.
+      CS_PUBLIC_RANGE: "203.0.113.0/24"
+      CS_TARGET_WWW: "203.0.113.10"
+      CS_TARGET_MAIL: "203.0.113.11"
+      CS_TARGET_VPN: "203.0.113.12"
+      CS_TARGET_DEV: "203.0.113.20"
+      # Standard ports — the lab's internal 2222/8443 are not visible here.
+      CS_SSH_PORT: "22"
+      CS_HTTPS_PORT: "443"
+    networks:
+      internet:
+        ipv4_address: 203.0.113.66
+    ports:
+      - "127.0.0.1:2220:22"
+    cap_add:
+      - NET_RAW
+    cap_drop:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  # A second actor on the same hostile segment, driven by a hand-paced script.
+  # Same tooling, same network position, same firewall rules — the ONLY thing
+  # that differs is behaviour. That is the point: if the policy treats these two
+  # differently, it is discriminating on behaviour and not on anything else.
+  operator:
+    image: localhost/cybersnare-attacker:lab
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: containers/Dockerfile.attacker
+    container_name: cs-operator
+    hostname: operator-workstation
+    environment:
+      CS_TARGET_WWW: "203.0.113.10"
+      CS_TARGET_DEV: "203.0.113.20"
+      CS_ROLE: "human"
+    networks:
+      internet:
+        ipv4_address: 203.0.113.77
+    ports:
+      - "127.0.0.1:2221:22"
+    cap_add:
+      - NET_RAW
+    cap_drop:
+      - NET_ADMIN
+    restart: unless-stopped

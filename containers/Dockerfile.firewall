@@ -1,0 +1,18 @@
+# Zone firewall — real nftables in a container netns.
+# Used for both cs-edge-fw (perimeter) and cs-core-fw (internal segmentation).
+FROM docker.io/library/alpine:3.20
+
+RUN apk add --no-cache nftables iproute2 python3 conntrack-tools
+
+WORKDIR /app
+COPY lib /app/lib
+COPY services /app/services
+COPY deploy/org/firewall/ /etc/cs/
+COPY containers/firewall-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV PYTHONPATH=/app/lib:/app \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["/entrypoint.sh"]

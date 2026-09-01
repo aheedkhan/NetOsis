@@ -1,0 +1,182 @@
+#!/usr/sbin/nft -f
+#
+# cs-edge-fw — NexusCorp perimeter firewall.
+#
+# Faces the simulated Internet (203.0.113.0/24, TEST-NET-3) on one leg, the DMZ
+# on another, and a transit link to the internal firewall on a third. It is the
+# only container attached to both the internet and dmz bridges, so there is no
+# path around it: an attacker on the internet segment can reach an internal
+# service only through a rule written here.
+#
+# Interface names are substituted at boot by firewall-entrypoint.sh.
+#
+# PUBLISHED ADDRESS BLOCK
+#   203.0.113.10  www.nexuscorp.example    -> 172.31.10.20  (real marketing site)
+#   203.0.113.11  mail.nexuscorp.example   -> 172.31.10.21  (webmail portal)
+#   203.0.113.12  vpn.nexuscorp.example    -> 172.31.10.22  (SSL-VPN portal)
+#   203.0.113.20  dev.nexuscorp.example    -> 10.200.2.10   (DECEPTION SURFACE)
+#
+# The deception surface is published as a neglected developer host. It is the
+# only public address whose SSH port is open, which is exactly the asymmetry a
+# scanning adversary is looking for.
+
+flush ruleset
+
+table inet cs_edge {
+
+    # ---- perimeter evidence ------------------------------------------------
+    # Dynamic sets with per-element counters. services/fw_agent polls these and
+    # emits canonical events; this is how perimeter activity becomes telemetry
+    # without needing NFLOG or a userspace log daemon inside the container.
+
+    set probe_accept {
+        type ipv4_addr . ipv4_addr . inet_service
+        flags dynamic,timeout
+        timeout 1h
+        size 8192
+        counter
+    }
+
+    set probe_drop {
+        type ipv4_addr . ipv4_addr . inet_service
+        flags dynamic,timeout
+        timeout 1h
+        size 8192
+        counter
+    }
+
+    set probe_icmp {
+        type ipv4_addr . ipv4_addr
+        flags dynamic,timeout
+        timeout 1h
+        size 2048
+        counter
+    }
+
+    # ---- decision-plane blocklist ------------------------------------------
+    # Populated over the fw_agent API by the decision plane. When an actor is
+    # classified as an automated tool with enough confidence there is nothing
+    # further to learn from it, so it is dropped here at the boundary rather
+    # than being served by a deception surface. Every packet a scanner sends
+    # after this point costs one nftables set lookup and nothing else.
+    set blocked {
+        type ipv4_addr
+        flags dynamic,timeout
+        timeout 6h
+        size 4096
+        counter
+    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        ip saddr @blocked drop
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+
+        # The published addresses are aliases on this firewall's Internet leg,
+        # so a probe against one of them is destined to a LOCAL address. When
+        # no DNAT rule in prerouting matches it, the routing decision sends it
+        # here to input rather than to forward. Perimeter scan evidence has to
+        # be collected in both chains or a port scan of the public block is
+        # invisible — the packets are dropped by policy before forward is ever
+        # consulted.
+
+        # Ping sweeps of the public block, recorded then answered. A silent
+        # perimeter is itself a tell.
+        iifname "@IF_INET@" icmp type echo-request \
+            update @probe_icmp { ip saddr . ip daddr } limit rate 10/second accept
+
+        icmp type echo-request limit rate 10/second accept
+
+        # fw_agent health endpoint, reachable from the management plane only.
+        # The management leg appears in no forward rule, so the firewall
+        # terminates management traffic and never bridges it into a zone.
+        iifname "@IF_MGMT@" tcp dport 9400 accept
+
+        # Anything else arriving from the Internet reached a published address
+        # on a port that publishes nothing. This is the single most common
+        # thing an adversary does, and it is the first evidence we get.
+        iifname "@IF_INET@" meta l4proto { tcp, udp } \
+            update @probe_drop { ip saddr . ip daddr . th dport } drop
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+
+        ip saddr @blocked drop
+        ct state invalid drop
+        ct state established,related accept
+
+        # ---- inbound from the Internet ------------------------------------
+        # Anything that survived DNAT hit a published service. Record the true
+        # source address before it is forwarded.
+        iifname "@IF_INET@" ct status dnat meta l4proto { tcp, udp } \
+            update @probe_accept { ip saddr . ip daddr . th dport } accept
+
+        iifname "@IF_INET@" ct status dnat accept
+
+        # ICMP sweeps of the public block.
+        iifname "@IF_INET@" icmp type echo-request \
+            update @probe_icmp { ip saddr . ip daddr } accept
+
+        # Everything else from the Internet is a probe at an address or port
+        # that publishes nothing. Counted, then dropped.
+        iifname "@IF_INET@" meta l4proto { tcp, udp } \
+            update @probe_drop { ip saddr . ip daddr . th dport } drop
+
+        # ---- outbound from the DMZ ----------------------------------------
+        # Real servers are allowed to talk out; a DMZ with no egress at all
+        # does not look like a production DMZ.
+        iifname "@IF_DMZ@" oifname "@IF_INET@" accept
+
+        # ---- DMZ toward the inside ----------------------------------------
+        # Deny the classic pivot. A compromised web server must not reach the
+        # corporate directory, file shares or databases.
+        iifname "@IF_DMZ@" oifname "@IF_TRANSIT@" \
+            tcp dport { 389, 636, 445, 139, 1433, 3306, 5432, 3389 } drop
+        iifname "@IF_DMZ@" oifname "@IF_TRANSIT@" ct state new accept
+
+        # ---- transit --------------------------------------------------------
+        iifname "@IF_TRANSIT@" oifname "@IF_INET@" accept
+        iifname "@IF_TRANSIT@" oifname "@IF_DMZ@" accept
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}
+
+table ip cs_edge_nat {
+
+    chain prerouting {
+        type nat hook prerouting priority dstnat; policy accept;
+
+        # --- real corporate services -------------------------------------
+        ip daddr 203.0.113.10 tcp dport { 80, 443 }     dnat to 172.31.10.20
+        ip daddr 203.0.113.11 tcp dport { 80, 443 }     dnat to 172.31.10.21
+        ip daddr 203.0.113.12 tcp dport { 443 }         dnat to 172.31.10.22
+
+        # --- deception surface --------------------------------------------
+        # Published on the standard ports. The adversary sees 22 and 443, not
+        # 2222 and 8443; the port shift is an implementation detail of the lab
+        # and must not leak into what the adversary observes.
+        ip daddr 203.0.113.20 tcp dport 22  dnat to 10.200.2.10:2222
+        ip daddr 203.0.113.20 tcp dport 443 dnat to 10.200.2.10:8443
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+
+        # DMZ hosts are stock images with no route back to the Internet
+        # segment, so traffic entering the DMZ is source-NATed to the
+        # firewall's own DMZ address.
+        oifname "@IF_DMZ@" ip saddr 203.0.113.0/24 snat to 172.31.10.2
+
+        # NOTHING is source-NATed toward the transit link. The deception plane
+        # keys actor identity on the observed source address, so the adversary's
+        # real address must survive the whole path. The reply route is installed
+        # on the sensor instead.
+    }
+}

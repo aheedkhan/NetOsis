@@ -1,0 +1,407 @@
+{
+  "$comment": "Single source of truth for the NexusCorp lab topology. Read by the intelligence plane, rendered by the dashboard, and used to generate the PDF figures, so all three cannot disagree.",
+  "org": {
+    "name": "NexusCorp Industrial Systems",
+    "domain": "nexuscorp.example"
+  },
+  "zones": [
+    {
+      "id": "internet",
+      "label": "Internet",
+      "cidr": "203.0.113.0/24",
+      "trust": "hostile",
+      "row": 0,
+      "note": "TEST-NET-3, simulated. No bridge in this lab reaches the real Internet."
+    },
+    {
+      "id": "dmz",
+      "label": "DMZ",
+      "cidr": "172.31.10.0/24",
+      "trust": "low",
+      "row": 2,
+      "note": "Public-facing real services."
+    },
+    {
+      "id": "transit",
+      "label": "Transit",
+      "cidr": "172.31.99.0/24",
+      "trust": "infrastructure",
+      "row": 2,
+      "note": "Perimeter firewall to core firewall."
+    },
+    {
+      "id": "corp",
+      "label": "Corporate LAN",
+      "cidr": "10.10.20.0/24",
+      "trust": "medium",
+      "row": 4,
+      "note": "Reachable from the deception zone on decoy ports only."
+    },
+    {
+      "id": "datacenter",
+      "label": "Datacenter",
+      "cidr": "10.10.30.0/24",
+      "trust": "high",
+      "row": 5,
+      "note": "Never reachable from the deception zone. Containment invariant."
+    },
+    {
+      "id": "deception",
+      "label": "Deception",
+      "cidr": "10.200.2.0/24",
+      "trust": "adversary-facing",
+      "row": 4,
+      "note": "CyberSnare surfaces. Source addresses are never NATed into this zone."
+    },
+    {
+      "id": "egress",
+      "label": "Egress",
+      "cidr": "10.200.3.0/24",
+      "trust": "contained",
+      "row": 5,
+      "note": "Stage-0 sinkhole. Attached to neither firewall."
+    },
+    {
+      "id": "mgmt",
+      "label": "Management",
+      "cidr": "10.200.1.0/24",
+      "trust": "control",
+      "row": 3,
+      "note": "Control plane. Appears in no forward rule on either firewall."
+    }
+  ],
+  "firewalls": [
+    {
+      "id": "edge-fw",
+      "label": "Perimeter firewall",
+      "role": "edge",
+      "table": "cs_edge",
+      "zones": [
+        "internet",
+        "dmz",
+        "transit",
+        "mgmt"
+      ],
+      "addresses": {
+        "internet": "203.0.113.2",
+        "dmz": "172.31.10.2",
+        "transit": "172.31.99.2",
+        "mgmt": "10.200.1.30"
+      }
+    },
+    {
+      "id": "core-fw",
+      "label": "Core firewall",
+      "role": "core",
+      "table": "cs_core",
+      "zones": [
+        "transit",
+        "corp",
+        "datacenter",
+        "deception",
+        "mgmt"
+      ],
+      "addresses": {
+        "transit": "172.31.99.3",
+        "corp": "10.10.20.2",
+        "datacenter": "10.10.30.2",
+        "deception": "10.200.2.2",
+        "mgmt": "10.200.1.31"
+      }
+    }
+  ],
+  "published": [
+    {
+      "vip": "203.0.113.10",
+      "name": "www.nexuscorp.example",
+      "ports": [
+        80,
+        443
+      ],
+      "target": "172.31.10.20",
+      "kind": "real"
+    },
+    {
+      "vip": "203.0.113.11",
+      "name": "mail.nexuscorp.example",
+      "ports": [
+        80,
+        443
+      ],
+      "target": "172.31.10.21",
+      "kind": "real",
+      "$note": "SMTP is not published in this build; the webmail portal is."
+    },
+    {
+      "vip": "203.0.113.12",
+      "name": "vpn.nexuscorp.example",
+      "ports": [
+        443
+      ],
+      "target": "172.31.10.22",
+      "kind": "real"
+    },
+    {
+      "vip": "203.0.113.20",
+      "name": "dev.nexuscorp.example",
+      "ports": [
+        22,
+        443
+      ],
+      "target": "10.200.2.10",
+      "kind": "deception"
+    }
+  ],
+  "hosts": [
+    {
+      "id": "attacker",
+      "label": "kali-attacker",
+      "zone": "internet",
+      "ip": "203.0.113.66",
+      "kind": "adversary",
+      "services": [
+        "nmap",
+        "curl",
+        "ssh"
+      ]
+    },
+    {
+      "id": "www01",
+      "label": "www01",
+      "zone": "dmz",
+      "ip": "172.31.10.20",
+      "kind": "real",
+      "services": [
+        "http/80",
+        "https/443"
+      ]
+    },
+    {
+      "id": "mail01",
+      "label": "mail01",
+      "zone": "dmz",
+      "ip": "172.31.10.21",
+      "kind": "real",
+      "services": [
+        "http/80",
+        "https/443"
+      ]
+    },
+    {
+      "id": "vpn01",
+      "label": "vpn01",
+      "zone": "dmz",
+      "ip": "172.31.10.22",
+      "kind": "real",
+      "services": [
+        "https/443"
+      ]
+    },
+    {
+      "id": "dc01",
+      "label": "dc01",
+      "zone": "corp",
+      "ip": "10.10.20.10",
+      "kind": "decoy",
+      "services": [
+        "ldap/389",
+        "smb/445",
+        "dns/53"
+      ]
+    },
+    {
+      "id": "fs01",
+      "label": "fs01",
+      "zone": "corp",
+      "ip": "10.10.20.11",
+      "kind": "decoy",
+      "services": [
+        "smb/445"
+      ]
+    },
+    {
+      "id": "erp01",
+      "label": "erp01",
+      "zone": "corp",
+      "ip": "10.10.20.12",
+      "kind": "decoy",
+      "services": [
+        "http/80"
+      ]
+    },
+    {
+      "id": "wks01",
+      "label": "wks01",
+      "zone": "corp",
+      "ip": "10.10.20.50",
+      "kind": "benign",
+      "services": [],
+      "note": "Generates ordinary business traffic."
+    },
+    {
+      "id": "db01",
+      "label": "db01",
+      "zone": "datacenter",
+      "ip": "10.10.30.10",
+      "kind": "protected",
+      "services": [
+        "postgres/5432"
+      ]
+    },
+    {
+      "id": "bkp01",
+      "label": "bkp01",
+      "zone": "datacenter",
+      "ip": "10.10.30.11",
+      "kind": "protected",
+      "services": [
+        "backup"
+      ]
+    },
+    {
+      "id": "sensor",
+      "label": "dev (deception surface)",
+      "zone": "deception",
+      "ip": "10.200.2.10",
+      "kind": "deception",
+      "services": [
+        "ssh/2222",
+        "https/8443",
+        "zeek"
+      ]
+    },
+    {
+      "id": "sinkhole",
+      "label": "sinkhole",
+      "zone": "egress",
+      "ip": "10.200.3.2",
+      "kind": "control",
+      "services": [
+        "dns/53",
+        "http/80"
+      ]
+    },
+    {
+      "id": "sandbox",
+      "label": "sandbox",
+      "zone": "egress",
+      "ip": "10.200.3.10",
+      "kind": "contained",
+      "services": []
+    },
+    {
+      "id": "logger",
+      "label": "logger",
+      "zone": "mgmt",
+      "ip": "10.200.1.10",
+      "kind": "control",
+      "services": [
+        "http/8088"
+      ]
+    },
+    {
+      "id": "decision",
+      "label": "decision",
+      "zone": "mgmt",
+      "ip": "10.200.1.11",
+      "kind": "control",
+      "services": [
+        "http/9000"
+      ]
+    },
+    {
+      "id": "gnn",
+      "label": "gnn-scorer",
+      "zone": "mgmt",
+      "ip": "10.200.1.12",
+      "kind": "control",
+      "services": [
+        "http/9100"
+      ]
+    },
+    {
+      "id": "intelligence",
+      "label": "intelligence",
+      "zone": "mgmt",
+      "ip": "10.200.1.14",
+      "kind": "control",
+      "services": [
+        "http/8090"
+      ]
+    }
+  ],
+  "policy_edges": [
+    {
+      "from": "internet",
+      "to": "dmz",
+      "verdict": "allow",
+      "detail": "published ports only, via DNAT"
+    },
+    {
+      "from": "internet",
+      "to": "deception",
+      "verdict": "allow",
+      "detail": "dev.nexuscorp.example 22/443, source address preserved"
+    },
+    {
+      "from": "internet",
+      "to": "corp",
+      "verdict": "deny",
+      "detail": "no published service"
+    },
+    {
+      "from": "internet",
+      "to": "datacenter",
+      "verdict": "deny",
+      "detail": "no published service"
+    },
+    {
+      "from": "dmz",
+      "to": "internet",
+      "verdict": "allow",
+      "detail": "outbound"
+    },
+    {
+      "from": "dmz",
+      "to": "corp",
+      "verdict": "restricted",
+      "detail": "directory, file and database ports blocked"
+    },
+    {
+      "from": "corp",
+      "to": "datacenter",
+      "verdict": "allow",
+      "detail": "ordinary business traffic"
+    },
+    {
+      "from": "corp",
+      "to": "internet",
+      "verdict": "allow",
+      "detail": "outbound browsing"
+    },
+    {
+      "from": "deception",
+      "to": "corp",
+      "verdict": "restricted",
+      "detail": "decoy ports 80/139/389/445/3389 \u2014 the L3 internal hop"
+    },
+    {
+      "from": "deception",
+      "to": "datacenter",
+      "verdict": "containment",
+      "detail": "never \u2014 recorded as a containment violation"
+    },
+    {
+      "from": "deception",
+      "to": "internet",
+      "verdict": "containment",
+      "detail": "never \u2014 egress goes to the sinkhole instead"
+    },
+    {
+      "from": "deception",
+      "to": "egress",
+      "verdict": "allow",
+      "detail": "stage-0 sinkhole, off both firewalls"
+    }
+  ]
+}

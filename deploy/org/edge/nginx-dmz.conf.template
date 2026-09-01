@@ -1,0 +1,46 @@
+# DMZ server block — real TLS.
+#
+# Rendered by the nginx entrypoint from /etc/nginx/templates. Only variables
+# prefixed CS_ are substituted (NGINX_ENVSUBST_FILTER), so nginx's own $uri and
+# $host survive untouched.
+
+server {
+    listen 80 default_server;
+    server_name ${CS_SERVER_NAME};
+    server_tokens off;
+
+    # A corporate site that serves plaintext on request is a finding in its own
+    # right; redirect the way a maintained estate does.
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name ${CS_SERVER_NAME};
+    server_tokens off;
+
+    ssl_certificate     /etc/nginx/tls/${CS_HOST}.crt;
+    ssl_certificate_key /etc/nginx/tls/${CS_HOST}.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:SSL:4m;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Login endpoints answer the way an appliance does: accept the POST, return
+    # a generic failure. The submitted credentials land in the access log, which
+    # is itself evidence about what the adversary believed would work.
+    location = /login { return 401 "Authentication failed\n"; }
+    location = /auth  { return 401 "Authentication failed\n"; }
+}

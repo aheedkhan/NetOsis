@@ -1,3 +1,22 @@
+# CyberSnare — NexusCorp lab topology.
+#
+# Eight bridges standing in for a real organisation's network. Every bridge is
+# internal, so nothing in this file can reach the actual Internet; the
+# 203.0.113.0/24 "Internet" is TEST-NET-3 and exists only between containers.
+#
+#   internet    203.0.113.0/24   the outside — attacker lives here
+#   dmz         172.31.10.0/24   public-facing real services
+#   transit     172.31.99.0/24   perimeter firewall <-> core firewall
+#   corp        10.10.20.0/24    user LAN
+#   datacenter  10.10.30.0/24    databases and backup — never reachable from deception
+#   deception   10.200.2.0/24    CyberSnare surfaces
+#   egress      10.200.3.0/24    sinkhole and sandbox
+#   mgmt        10.200.1.0/24    control plane
+#
+# The two firewall containers are the ONLY containers attached to more than one
+# zone bridge. That is what makes the segmentation real rather than declared:
+# there is no route between zones except through a rule in deploy/org/firewall.
+
 name: cybersnare
 
 x-python: &python
@@ -7,7 +26,73 @@ x-python: &python
     context: .
     dockerfile: containers/Dockerfile.python
 
+x-gnn: &gnn
+  image: localhost/cybersnare-gnn:lab
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: containers/Dockerfile.gnn
+
+x-firewall: &firewall
+  image: localhost/cybersnare-firewall:lab
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: containers/Dockerfile.firewall
+  cap_add:
+    - NET_ADMIN
+    - NET_RAW
+  # /proc/sys is mounted read-only in the container, so forwarding cannot be
+  # turned on from the entrypoint. These are namespaced sysctls applied by the
+  # runtime at creation, which is the only point they can be set.
+  sysctls:
+    net.ipv4.ip_forward: "1"
+    net.ipv4.conf.all.rp_filter: "0"
+  restart: unless-stopped
+
+# Stock nginx serving generated NexusCorp content. These hosts are ordinary
+# servers with no CyberSnare code in them at all — they are the organisation,
+# not the deception.
+x-orghost: &orghost
+  image: docker.io/library/nginx:alpine
+  restart: unless-stopped
+
 networks:
+  internet:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 203.0.113.0/24
+          gateway: 203.0.113.1
+  dmz:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.10.0/24
+          gateway: 172.31.10.1
+  transit:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.99.0/24
+          gateway: 172.31.99.1
+  corp:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.10.20.0/24
+          gateway: 10.10.20.1
+  datacenter:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.10.30.0/24
+          gateway: 10.10.30.1
   mgmt:
     driver: bridge
     internal: true
@@ -31,6 +116,221 @@ networks:
           gateway: 10.200.3.1
 
 services:
+
+  # ===================================================================
+  # PERIMETER
+  # ===================================================================
+
+  edge-fw:
+    <<: *firewall
+    container_name: cs-edge-fw
+    hostname: edge-fw
+    environment:
+      CS_FW_ROLE: "edge"
+      CS_FW_TABLE: "cs_edge"
+      CS_FW_RULES: "/etc/cs/edge.nft"
+      CS_FW_IFMAP: "INET=203.0.113.2 DMZ=172.31.10.2 TRANSIT=172.31.99.2 MGMT=10.200.1.30"
+      # The public address block. Each is an alias on the Internet-facing leg.
+      CS_FW_VIPS: >-
+        203.0.113.10/24@203.0.113.2
+        203.0.113.11/24@203.0.113.2
+        203.0.113.12/24@203.0.113.2
+        203.0.113.20/24@203.0.113.2
+      # Zones that live behind the core firewall.
+      CS_FW_ROUTES: "10.10.20.0/24:172.31.99.3 10.10.30.0/24:172.31.99.3 10.200.2.0/24:172.31.99.3"
+      CS_LOGGER_HOST: "10.200.1.10"
+      CS_LOGGER_PORT: "8088"
+      CS_ARM: "A"
+      CS_LEVEL: "L1"
+      CS_MANIFEST_ID: "p0-static-v1"
+    networks:
+      internet:
+        ipv4_address: 203.0.113.2
+      dmz:
+        ipv4_address: 172.31.10.2
+      transit:
+        ipv4_address: 172.31.99.2
+      mgmt:
+        ipv4_address: 10.200.1.30
+    depends_on:
+      logger:
+        condition: service_healthy
+
+  core-fw:
+    <<: *firewall
+    container_name: cs-core-fw
+    hostname: core-fw
+    environment:
+      CS_FW_ROLE: "core"
+      CS_FW_TABLE: "cs_core"
+      CS_FW_RULES: "/etc/cs/core.nft"
+      CS_FW_IFMAP: >-
+        TRANSIT=172.31.99.3 CORP=10.10.20.2
+        DATACENTER=10.10.30.2 DECEPTION=10.200.2.2 MGMT=10.200.1.31
+      CS_FW_ROUTES: "203.0.113.0/24:172.31.99.2 172.31.10.0/24:172.31.99.2"
+      CS_LOGGER_HOST: "10.200.1.10"
+      CS_LOGGER_PORT: "8088"
+      CS_ARM: "A"
+      CS_LEVEL: "L1"
+      CS_MANIFEST_ID: "p0-static-v1"
+    networks:
+      transit:
+        ipv4_address: 172.31.99.3
+      corp:
+        ipv4_address: 10.10.20.2
+      datacenter:
+        ipv4_address: 10.10.30.2
+      deception:
+        ipv4_address: 10.200.2.2
+      mgmt:
+        ipv4_address: 10.200.1.31
+    depends_on:
+      logger:
+        condition: service_healthy
+
+  # ===================================================================
+  # DMZ — real services, published to the simulated Internet
+  # ===================================================================
+
+  www01:
+    <<: *orghost
+    container_name: cs-www01
+    hostname: www01
+    environment:
+      CS_HOST: "www01"
+      CS_SERVER_NAME: "www.nexuscorp.example"
+      NGINX_ENVSUBST_FILTER: "CS_"
+    volumes:
+      - ./deploy/org/sites/www01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-dmz.conf.template:/etc/nginx/templates/default.conf.template:ro,z
+      - ./deploy/org/tls:/etc/nginx/tls:ro,z
+    networks:
+      dmz:
+        ipv4_address: 172.31.10.20
+
+  mail01:
+    <<: *orghost
+    container_name: cs-mail01
+    hostname: mail01
+    environment:
+      CS_HOST: "mail01"
+      CS_SERVER_NAME: "mail.nexuscorp.example"
+      NGINX_ENVSUBST_FILTER: "CS_"
+    volumes:
+      - ./deploy/org/sites/mail01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-dmz.conf.template:/etc/nginx/templates/default.conf.template:ro,z
+      - ./deploy/org/tls:/etc/nginx/tls:ro,z
+    networks:
+      dmz:
+        ipv4_address: 172.31.10.21
+
+  vpn01:
+    <<: *orghost
+    container_name: cs-vpn01
+    hostname: vpn01
+    environment:
+      CS_HOST: "vpn01"
+      CS_SERVER_NAME: "vpn.nexuscorp.example"
+      NGINX_ENVSUBST_FILTER: "CS_"
+    volumes:
+      - ./deploy/org/sites/vpn01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-dmz.conf.template:/etc/nginx/templates/default.conf.template:ro,z
+      - ./deploy/org/tls:/etc/nginx/tls:ro,z
+    networks:
+      dmz:
+        ipv4_address: 172.31.10.22
+
+  # ===================================================================
+  # CORP — the user LAN. Reachable from the deception zone on a few
+  # decoy ports only; that path is the L3 internal hop.
+  # ===================================================================
+
+  dc01:
+    <<: *orghost
+    container_name: cs-dc01
+    hostname: dc01
+    volumes:
+      - ./deploy/org/sites/dc01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-org.conf:/etc/nginx/conf.d/default.conf:ro,z
+    networks:
+      corp:
+        ipv4_address: 10.10.20.10
+
+  fs01:
+    <<: *orghost
+    container_name: cs-fs01
+    hostname: fs01
+    volumes:
+      - ./deploy/org/sites/fs01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-org.conf:/etc/nginx/conf.d/default.conf:ro,z
+    networks:
+      corp:
+        ipv4_address: 10.10.20.11
+
+  erp01:
+    <<: *orghost
+    container_name: cs-erp01
+    hostname: erp01
+    volumes:
+      - ./deploy/org/sites/erp01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-org.conf:/etc/nginx/conf.d/default.conf:ro,z
+    networks:
+      corp:
+        ipv4_address: 10.10.20.12
+
+  # A workstation generating ordinary business traffic. Without benign
+  # background the scoring plane only ever sees attacks and cannot be shown
+  # to discriminate.
+  wks01:
+    image: docker.io/library/alpine:3.20
+    container_name: cs-wks01
+    hostname: wks01
+    command:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache curl >/dev/null 2>&1
+        while true; do
+          for t in 10.10.20.10 10.10.20.11 10.10.20.12 10.10.30.10; do
+            curl -s -m 3 -o /dev/null "http://$$t/" || true
+            sleep $$(( (RANDOM % 7) + 3 ))
+          done
+        done
+    networks:
+      corp:
+        ipv4_address: 10.10.20.50
+    restart: unless-stopped
+
+  # ===================================================================
+  # DATACENTER — must never be reachable from the deception zone
+  # ===================================================================
+
+  db01:
+    <<: *orghost
+    container_name: cs-db01
+    hostname: db01
+    volumes:
+      - ./deploy/org/sites/db01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-org.conf:/etc/nginx/conf.d/default.conf:ro,z
+    networks:
+      datacenter:
+        ipv4_address: 10.10.30.10
+
+  bkp01:
+    <<: *orghost
+    container_name: cs-bkp01
+    hostname: bkp01
+    volumes:
+      - ./deploy/org/sites/bkp01:/usr/share/nginx/html:ro,z
+      - ./deploy/org/edge/nginx-org.conf:/etc/nginx/conf.d/default.conf:ro,z
+    networks:
+      datacenter:
+        ipv4_address: 10.10.30.11
+
+  # ===================================================================
+  # CONTROL PLANE
+  # ===================================================================
+
   decision:
     <<: *python
     container_name: cs-decision
@@ -39,8 +339,15 @@ services:
     environment:
       CS_BIND: "0.0.0.0"
       CS_PORT: "9000"
+      CS_POLICY: "P0"
+      CS_CONFIG_DIR: "/config"
+      CS_GNN_ENABLED: "0"
+      CS_GNN_HOST: "10.200.1.12"
+      CS_GNN_PORT: "9100"
       CS_MANIFEST_SEED: "/config/manifest-p0.json"
       CS_MANIFEST_CURRENT: "/data/manifests/current.json"
+      CS_LOGGER_HOST: "10.200.1.10"
+      CS_LOGGER_PORT: "8088"
     volumes:
       - ./config:/config:ro,z
       - ./data/manifests:/data/manifests:z
@@ -61,6 +368,27 @@ services:
       timeout: 3s
       retries: 12
       start_period: 3s
+    restart: unless-stopped
+
+  gnn_scorer:
+    <<: *gnn
+    container_name: cs-gnn
+    hostname: gnn-scorer
+    command: ["python", "-m", "services.gnn_scorer"]
+    environment:
+      CS_BIND: "0.0.0.0"
+      CS_PORT: "9100"
+      CS_LOGGER_HOST: "10.200.1.10"
+      CS_LOGGER_PORT: "8088"
+      CS_GNN_CHECKPOINT: "/data/models/actor-gnn.pt"
+    volumes:
+      - ./data/models:/data/models:ro,z
+    networks:
+      mgmt:
+        ipv4_address: 10.200.1.12
+    depends_on:
+      logger:
+        condition: service_healthy
     restart: unless-stopped
 
   logger:
@@ -99,6 +427,38 @@ services:
       start_period: 3s
     restart: unless-stopped
 
+  intelligence:
+    <<: *python
+    container_name: cs-intelligence
+    hostname: intelligence
+    command: ["python", "-m", "services.intelligence"]
+    environment:
+      CS_BIND: "0.0.0.0"
+      CS_PORT: "8090"
+      CS_LOG_PATH: "/data/events.jsonl"
+      CS_DASHBOARD_DIR: "/dashboard"
+      CS_DECISION_HOST: "10.200.1.11"
+      CS_DECISION_PORT: "9000"
+      CS_TOPOLOGY: "/config/topology.json"
+      CS_EVENT_TAIL: "15000"
+    volumes:
+      - ./data/events:/data:ro,z
+      - ./config:/config:ro,z
+      - ./deploy/dashboard:/dashboard:ro,z
+    networks:
+      mgmt:
+        ipv4_address: 10.200.1.14
+    ports:
+      - "127.0.0.1:18090:8090"
+    depends_on:
+      logger:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===================================================================
+  # DECEPTION ZONE
+  # ===================================================================
+
   sensor:
     image: localhost/cybersnare-zeek:lab
     pull_policy: build
@@ -106,9 +466,12 @@ services:
       context: .
       dockerfile: containers/Dockerfile.zeek
     container_name: cs-sensor
-    hostname: sensor
+    hostname: dev
     environment:
       CS_ZEEK_IFACE: eth0
+      # Return path for adversary traffic. The perimeter does not source-NAT
+      # into this zone, so the surface must know how to answer the Internet.
+      CS_RETURN_ROUTES: "203.0.113.0/24:10.200.2.2 172.31.10.0/24:10.200.2.2 10.10.20.0/24:10.200.2.2"
     volumes:
       - ./data/zeek:/zeek/logs:z
     networks:
@@ -118,7 +481,6 @@ services:
         ipv4_address: 10.200.1.20
     ports:
       - "127.0.0.1:2222:2222"
-      - "127.0.0.1:8080:8080"
       - "127.0.0.1:8443:8443"
     cap_add:
       - NET_RAW
@@ -139,9 +501,13 @@ services:
       CS_SELF_IP: "10.200.2.10"
       CS_LOGGER_HOST: "10.200.1.10"
       CS_LOGGER_PORT: "8088"
+      CS_DECISION_HOST: "10.200.1.11"
+      CS_DECISION_PORT: "9000"
       CS_ARM: "A"
       CS_LEVEL: "L1"
       CS_MANIFEST_ID: "p0-static-v1"
+    volumes:
+      - ./config/shell-users.json:/config/shell-users.json:ro,z
     network_mode: service:sensor
     depends_on:
       logger:
@@ -157,11 +523,12 @@ services:
     command: ["python", "-m", "services.http_surface"]
     environment:
       CS_BIND: "0.0.0.0"
-      CS_PORT: "8080"
       CS_HTTPS_PORT: "8443"
       CS_SELF_IP: "10.200.2.10"
       CS_LOGGER_HOST: "10.200.1.10"
       CS_LOGGER_PORT: "8088"
+      CS_DECISION_HOST: "10.200.1.11"
+      CS_DECISION_PORT: "9000"
       CS_ARM: "A"
       CS_LEVEL: "L1"
       CS_MANIFEST_ID: "p0-static-v1"
@@ -197,6 +564,10 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # ===================================================================
+  # EGRESS — stage-0 sinkhole. Not attached to either firewall, so the
+  # deception plane has no path to the simulated Internet at all.
+  # ===================================================================
 
   sinkhole:
     <<: *python

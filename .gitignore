@@ -30,12 +30,17 @@ data/manifests/current.json.tmp
 data/zeek/*.log
 data/zeek/*.log.*
 data/zeek/*.json
+data/collection/
+data/milestone1-report.json
 
 # Compose local overrides (often contain host-only bind paths)
 compose.override.yml
 compose.override.yaml
 docker-compose.override.yml
 docker-compose.override.yaml
+
+# Exported container bundles (offline transfer)
+dist/
 
 # Saved / exported container images and storage dumps
 *.tar
@@ -55,6 +60,16 @@ containers/storage/
 # Duplicate of docs/ — keep the source tree, not the zip
 docs.zip
 
+# Trained model checkpoints — derived from this machine's lab traffic,
+# regenerate with `./cs train-gnn` rather than shipping one
+data/models/*.pt
+data/models/*.pth
+
+# Editor-specific tool bundles (skills, agent config) — not project source
+.cursor/
+.claude/settings.local.json
+
+
 # Office / generated docs — source of truth is markdown + figures
 *.doc
 *.docx
@@ -62,3 +77,7 @@ docs.zip
 ~$*
 *.pdf
 docs/build/*.txt
+
+# Dashboard UI build artefacts
+deploy/dashboard-ui/node_modules/
+deploy/dashboard/assets/
