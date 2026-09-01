@@ -11,8 +11,8 @@ import asyncssh
 
 from cs.events import new_event
 from cs.ingest import emit_bg
-from cs.manifest import auth_mode, manifest_id, poll_forever, wait_ready
-from cs.restricted_shell import handle_line, load_users
+from cs.manifest import auth_mode, level as manifest_level, manifest_id, poll_forever, wait_ready
+from cs.restricted_shell import FileTouch, RestrictedShell, load_users
 from cs.tinyhttp import wait_http
 
 BIND = os.environ.get("CS_BIND", "0.0.0.0")
@@ -163,6 +163,12 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
         self._chan: asyncssh.SSHServerSessionChannel | None = None
         self._buf = ""
         self._exec_cmd = ""
+        # One id for the whole session, not one per command — the previous
+        # version generated a fresh uuid4() on every line, so no two commands
+        # from the same login were ever correlated by session_id downstream
+        # (the pattern matcher and timeline both group by it).
+        self._session_id = str(uuid.uuid4())
+        self._shell = RestrictedShell(level=manifest_level())
 
     def connection_made(self, chan: asyncssh.SSHServerSessionChannel) -> None:
         self._chan = chan
@@ -183,7 +189,7 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
         if not self._chan:
             return
         if self._exec_cmd:
-            result = handle_line(self._exec_cmd.strip(), emit=self._emit_command)
+            result = self._run(self._exec_cmd.strip())
             if result and result != "logout\n":
                 self._chan.write(result.replace("\n", "\r\n"))
             self._chan.exit(0)
@@ -196,7 +202,7 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
         self._buf += data.replace("\r", "")
         while "\n" in self._buf:
             line, self._buf = self._buf.split("\n", 1)
-            result = handle_line(line, emit=self._emit_command)
+            result = self._run(line)
             if result == "logout\n":
                 self._chan.write("\r\n")
                 self._chan.exit(0)
@@ -205,17 +211,67 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
                 self._chan.write(result.replace("\n", "\r\n"))
             self._chan.write("$ ")
 
-    def _emit_command(self, cmd: str) -> None:
+    def _run(self, line: str) -> str:
+        """Run one line against the session's own shell state and report it."""
+        if not line.strip():
+            return ""
+        # A live escalation mid-session (a decision-plane transition while the
+        # attacker is already connected) has to open the deeper filesystem
+        # immediately, the same way the manifest already reopens other
+        # capabilities without requiring a fresh connection.
+        self._shell.set_level(manifest_level())
+        result = self._shell.handle_line(line)
+        self._emit_command(line, result.touch, vm_check=result.vm_check)
+        return "logout\n" if result.logout else result.output
+
+    def _emit_command(
+        self, cmd: str, touch: FileTouch | None, *, vm_check: bool = False
+    ) -> None:
         src_ip, src_port = self._peer
         dataset = "cybersnare.shell.command"
-        lower = cmd.lower()
-        if any(
-            probe in lower
-            for probe in ("/proc/", "dmesg", "systemd-detect-virt", "virt-what", "lscpu")
-        ):
+        technique_id, technique_name = "T1059", "Command and Scripting Interpreter"
+        tactic_id, tactic_name = "TA0002", "Execution"
+        engage_activity = "EAC0005"
+
+        if vm_check:
             dataset = "cybersnare.shell.vm_check"
-        elif "passwd" in lower and "shadow" in lower:
-            dataset = "cybersnare.shell.proc_read"
+            technique_id, technique_name = "T1497", "Virtualization/Sandbox Evasion"
+            tactic_id, tactic_name = "TA0005", "Defense Evasion"
+        elif touch and touch.sensitivity == "honeytoken":
+            # The single strongest piece of evidence this surface can produce:
+            # the operator read the planted credentials file. Mapped to
+            # Unsecured Credentials rather than generic execution so it shows
+            # up distinctly in the ATT&CK breakdown, not folded into "ran a
+            # command" like everything else.
+            dataset = "cybersnare.shell.file_access"
+            technique_id, technique_name = "T1552.001", "Unsecured Credentials: Credentials In Files"
+            tactic_id, tactic_name = "TA0006", "Credential Access"
+            engage_activity = "EAC0009"
+        elif touch and touch.sensitivity == "sensitive":
+            dataset = "cybersnare.shell.file_access"
+            technique_id, technique_name = "T1083", "File and Directory Discovery"
+            tactic_id, tactic_name = "TA0007", "Discovery"
+        elif touch and touch.action == "list":
+            dataset = "cybersnare.shell.file_access"
+            technique_id, technique_name = "T1083", "File and Directory Discovery"
+            tactic_id, tactic_name = "TA0007", "Discovery"
+        elif touch and touch.action == "search":
+            dataset = "cybersnare.shell.file_access"
+            technique_id, technique_name = "T1083", "File and Directory Discovery"
+            tactic_id, tactic_name = "TA0007", "Discovery"
+        elif touch and touch.action == "read":
+            dataset = "cybersnare.shell.file_access"
+            technique_id, technique_name = "T1005", "Data from Local System"
+            tactic_id, tactic_name = "TA0009", "Collection"
+
+        shell_extra: dict = {"command": cmd, "manifest_id": manifest_id()}
+        if touch:
+            shell_extra["file_access"] = {
+                "paths": touch.paths,
+                "action": touch.action,
+                "sensitivity": touch.sensitivity,
+            }
+
         emit_bg(
             new_event(
                 dataset=dataset,
@@ -227,14 +283,14 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
                 dest_ip=DEST_IP,
                 dest_port=PORT,
                 dest_service="ssh",
-                session_id=str(uuid.uuid4()),
+                session_id=self._session_id,
                 user_name=self._username,
-                tactic_id="TA0002",
-                tactic_name="Execution",
-                technique_id="T1059",
-                technique_name="Command and Scripting Interpreter",
-                engage_activity="EAC0005",
-                extra={"shell": {"command": cmd, "manifest_id": manifest_id()}},
+                tactic_id=tactic_id,
+                tactic_name=tactic_name,
+                technique_id=technique_id,
+                technique_name=technique_name,
+                engage_activity=engage_activity,
+                extra={"shell": shell_extra},
             )
         )
 

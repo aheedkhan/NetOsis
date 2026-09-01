@@ -128,6 +128,18 @@ def _login_path(event: dict[str, Any]) -> bool:
     return any(token in url.lower() for token in ("login", "auth", "signin", "admin"))
 
 
+def _file_sensitivity(sensitivity: str) -> Callable[[dict[str, Any]], bool]:
+    def check(event: dict[str, Any]) -> bool:
+        return ((event.get("shell") or {}).get("file_access") or {}).get("sensitivity") == sensitivity
+    return check
+
+
+def _file_action(action: str) -> Callable[[dict[str, Any]], bool]:
+    def check(event: dict[str, Any]) -> bool:
+        return ((event.get("shell") or {}).get("file_access") or {}).get("action") == action
+    return check
+
+
 # --------------------------------------------------------------------------
 # The pattern library
 # --------------------------------------------------------------------------
@@ -363,6 +375,80 @@ PATTERNS: tuple[Pattern, ...] = (
         tactic_name="Exfiltration",
         engage_activity="EAC0004",
         intent={"exfiltration": 0.7, "lateral_movement": 0.3},
+        intel_gain=1.0,
+        severity="critical",
+    ),
+    Pattern(
+        id="filesystem_recon",
+        name="Filesystem exploration",
+        description=(
+            "Repeated directory listings and reads across the shell's "
+            "filesystem — the adversary is mapping what this host holds "
+            "before deciding what to do with it."
+        ),
+        steps=(Step("listings", datasets=("cybersnare.shell.file_access",), min_events=4),),
+        window_s=600,
+        technique_id="T1083",
+        technique_name="File and Directory Discovery",
+        tactic_id="TA0007",
+        tactic_name="Discovery",
+        engage_activity="EAC0005",
+        intent={"recon_scan": 0.6, "exploit_attempt": 0.4},
+        intel_gain=0.4,
+        severity="medium",
+    ),
+    Pattern(
+        id="credential_file_read",
+        name="Credentials file read",
+        description=(
+            "The planted service-account file (config/db.env) was read. This "
+            "is the strongest single piece of evidence this surface can "
+            "produce: the adversary now holds what looks like a working "
+            "password for two named internal hosts, and what they do next "
+            "with it is the whole point of building this deep."
+        ),
+        steps=(
+            Step(
+                "read_credentials",
+                datasets=("cybersnare.shell.file_access",),
+                predicate=_file_sensitivity("honeytoken"),
+                min_events=1,
+            ),
+        ),
+        window_s=3600,
+        technique_id="T1552.001",
+        technique_name="Unsecured Credentials: Credentials In Files",
+        tactic_id="TA0006",
+        tactic_name="Credential Access",
+        engage_activity="EAC0009",
+        intent={"exploit_attempt": 0.4, "lateral_movement": 0.6},
+        intel_gain=1.0,
+        severity="critical",
+    ),
+    Pattern(
+        id="internal_hop_attempt",
+        name="Internal hop using found credentials",
+        description=(
+            "The credentials read from config/db.env were used: traffic from "
+            "the deception zone reached the corp namespace on a decoy port "
+            "after the honeytoken was read. This is the L3 internal hop "
+            "actually happening, not merely staged in a manifest field."
+        ),
+        steps=(
+            Step(
+                "read_credentials",
+                datasets=("cybersnare.shell.file_access",),
+                predicate=_file_sensitivity("honeytoken"),
+            ),
+            Step("pivot", datasets=("cybersnare.fw.lateral", "cybersnare.fw.lateral_denied")),
+        ),
+        window_s=1800,
+        technique_id="T1021",
+        technique_name="Remote Services",
+        tactic_id="TA0008",
+        tactic_name="Lateral Movement",
+        engage_activity="EAC0004",
+        intent={"lateral_movement": 1.0},
         intel_gain=1.0,
         severity="critical",
     ),

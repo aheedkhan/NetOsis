@@ -19,6 +19,7 @@ what is deliberately deferred, and what is **out of scope** for milestone 1.
 | Sandbox isolation | P3 | **Done** — caps dropped, read-only, limits |
 | §4.5 auth gate (19 properties) | P3 | **Done** — `./cs gate` (19/19 with lab approval file) |
 | L2 restricted shell | P3 | **Done** — `./cs set-level L2`, `./scripts/verify-l2.sh` |
+| L3 populated filesystem + honeytoken internal hop | P6 (pulled forward) | **Done** — `lib/cs/virtual_fs.py` layered L2/L3 tree, `cybersnare.shell.file_access` telemetry, `credential_file_read`/`internal_hop_attempt` patterns in `lib/cs/patterns.py` |
 | Slow-path intent inference | P3 | **Done** — rules + optional LLM (`CS_LLM_ENABLED=1`) |
 | BURN manifest | P3 | **Done** — `manifest-burn.json`, P1/P2 suspicion path |
 
@@ -49,8 +50,7 @@ what is deliberately deferred, and what is **out of scope** for milestone 1.
 
 | Item | Phase | Note |
 |------|-------|------|
-| L3 immerse actuators (populated FS, internal hop) | **P6** | Manifest + decoy nginx only; no full immerse |
-| Artifact generation at scale | P6 | Not started |
+| Artifact generation at scale (per-actor unique file variants) | P6 | Not started — the L3 tree above is one authored story, not yet varied per actor |
 | Policy P3 (learned over corpus) | **P7** | Not started |
 | Full k3s production deployment | P6+ | `deploy/k8s/` scaffolding only |
 | WireGuard + public edge live | Org | `deploy/org/` scripts; local lab uses `127.0.0.1` only |

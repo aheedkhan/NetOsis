@@ -12,6 +12,7 @@ DATASET_TECHNIQUE: dict[str, tuple[str, str, str, str]] = {
     "cybersnare.shell.command": ("T1059", "Command and Scripting Interpreter", "TA0002", "Execution"),
     "cybersnare.shell.vm_check": ("T1497", "Virtualization/Sandbox Evasion", "TA0005", "Defense Evasion"),
     "cybersnare.shell.proc_read": ("T1007", "System Service Discovery", "TA0007", "Discovery"),
+    "cybersnare.shell.file_access": ("T1083", "File and Directory Discovery", "TA0007", "Discovery"),
     "cybersnare.sinkhole.dns": ("T1071", "Application Layer Protocol", "TA0011", "Command and Control"),
     "cybersnare.sinkhole.http": ("T1105", "Ingress Tool Transfer", "TA0011", "Command and Control"),
     "cybersnare.zeek.conn": ("T1595", "Active Scanning", "TA0043", "Reconnaissance"),
@@ -29,6 +30,7 @@ ENGAGE_BY_DATASET: dict[str, str] = {
     "cybersnare.sinkhole.http": "EAC0003",
     "cybersnare.decision.transition": "EAC0004",
     "cybersnare.zeek.conn": "EAC0003",
+    "cybersnare.shell.file_access": "EAC0005",
 }
 
 
