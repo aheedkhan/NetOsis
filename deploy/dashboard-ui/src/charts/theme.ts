@@ -1,27 +1,37 @@
+// Restrained iOS/macOS system palette — used only where colour carries
+// meaning (a dataset series, a status). No neon, no glow.
 export const CHART = {
-  zeek: "#22d3ee",
-  http: "#60a5fa",
-  ssh: "#a78bfa",
-  shell: "#34d399",
-  sinkhole: "#fb7185",
-  decision: "#fbbf24",
-  other: "#64748b",
-  grid: "rgba(148,163,184,0.12)",
-  axis: "#64748b",
-  tooltipBg: "rgba(10,15,28,0.95)",
-  tooltipBorder: "rgba(34,211,238,0.25)",
+  zeek: "#64d2ff",
+  http: "#0a84ff",
+  ssh: "#bf5af2",
+  shell: "#30d158",
+  sinkhole: "#ff453a",
+  decision: "#ff9f0a",
+  other: "#8e8e93",
+  grid: "rgba(255,255,255,0.08)",
+  axis: "rgba(255,255,255,0.4)",
+  tooltipBg: "#1c1c1f",
+  tooltipBorder: "rgba(255,255,255,0.12)",
 };
 
 export const PIE_COLORS = [
-  "#22d3ee",
-  "#60a5fa",
-  "#a78bfa",
-  "#34d399",
-  "#fb7185",
-  "#fbbf24",
-  "#f472b6",
-  "#94a3b8",
+  "#0a84ff",
+  "#64d2ff",
+  "#bf5af2",
+  "#30d158",
+  "#ff453a",
+  "#ff9f0a",
+  "#ff2d55",
+  "#8e8e93",
 ];
+
+// Bot-vs-human — the one place a strong colour split is meaningful rather
+// than decorative: it is the actual verdict the deception platform acts on.
+export const CAPABILITY_COLOR: Record<string, string> = {
+  automated: "#ff453a",
+  scripted: "#ff9f0a",
+  interactive_operator: "#30d158",
+};
 
 export function shortDataset(key: string) {
   return key.replace("cybersnare.", "");

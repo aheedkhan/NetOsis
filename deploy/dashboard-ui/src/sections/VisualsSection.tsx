@@ -176,12 +176,20 @@ type Props = {
   deception: DeceptionState;
   enabled: boolean;
   refreshKey?: string;
+  /** Jump straight to this actor's story — set when a user clicks an actor
+   *  elsewhere in the dashboard (the network map, the actors table). */
+  initialActor?: string;
 };
 
-export function VisualsSection({ deception, enabled, refreshKey }: Props) {
+export function VisualsSection({ deception, enabled, refreshKey, initialActor }: Props) {
   const graph = useAttackGraph(enabled, refreshKey);
   const [query, setQuery] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialActor) graph.setSelected(initialActor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once per incoming selection, not on every graph identity change
+  }, [initialActor]);
 
   const machines = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -5,22 +5,34 @@
 }
 
 :root {
-  --bg-0: #04060d;
-  --bg-1: #0a0f1c;
-  --bg-2: #111827;
-  --glass: rgba(17, 24, 39, 0.72);
-  --glass-border: rgba(148, 163, 184, 0.12);
-  --text: #f1f5f9;
-  --muted: #94a3b8;
-  --dim: #64748b;
-  --cyan: #22d3ee;
-  --emerald: #34d399;
-  --violet: #a78bfa;
-  --amber: #fbbf24;
-  --rose: #fb7185;
-  --blue: #60a5fa;
-  --font-display: "Syne", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Neutral surfaces — near-black, no colour cast. The variable NAMES below
+     are kept from the previous theme (App.css references them ~150 times);
+     only the VALUES change, from saturated neon to the restrained iOS/macOS
+     system palette, and the effects that made this look like a stock
+     "hacker dashboard" template — text gradients, glowing box-shadows,
+     backdrop-blur glass — are removed at their call sites in App.css rather
+     than only muted here. */
+  --bg-0: #000000;
+  --bg-1: #0a0a0c;
+  --bg-2: #121214;
+  --glass: #17171a;
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --text: rgba(255, 255, 255, 0.94);
+  --muted: rgba(255, 255, 255, 0.56);
+  --dim: rgba(255, 255, 255, 0.38);
+
+  /* iOS/macOS system colours — used only for status meaning (badges, chart
+     series), never as background decoration. */
+  --cyan: #64d2ff;
+  --emerald: #30d158;
+  --violet: #bf5af2;
+  --amber: #ff9f0a;
+  --rose: #ff453a;
+  --blue: #0a84ff;
+
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter",
+    "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Menlo", "JetBrains Mono", monospace;
   color-scheme: dark;
 }
 
@@ -36,6 +48,8 @@ body {
   color: var(--text);
   background: var(--bg-0);
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -43,29 +57,18 @@ button {
   cursor: pointer;
 }
 
+/* A single, quiet backdrop — no radial glows, no grid overlay. Depth comes
+   from card elevation and hairline borders, not decorative background art. */
 .app-bg {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 211, 238, 0.14), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(167, 139, 250, 0.1), transparent),
-    radial-gradient(ellipse 50% 30% at 0% 100%, rgba(52, 211, 153, 0.08), transparent),
-    linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-0));
+  background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
 }
 
 .app-grid {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.35;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  display: none;
 }
 
 .shell {
@@ -76,62 +79,56 @@ button {
   padding: 1.5rem 1.25rem 3rem;
 }
 
+/* Solid surface with a hairline border — the Apple card, not frosted glass. */
 .glass-card {
   background: var(--glass);
   border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
-    0 20px 50px rgba(0, 0, 0, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .mono {
   font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
+  padding: 0.22rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+  font-family: var(--font-display);
+  text-transform: none;
 }
 
 .badge-cyan {
-  background: rgba(34, 211, 238, 0.12);
+  background: rgba(100, 210, 255, 0.14);
   color: var(--cyan);
-  border: 1px solid rgba(34, 211, 238, 0.25);
+  border: none;
 }
-
 .badge-violet {
-  background: rgba(167, 139, 250, 0.12);
+  background: rgba(191, 90, 242, 0.14);
   color: var(--violet);
-  border: 1px solid rgba(167, 139, 250, 0.25);
+  border: none;
 }
-
 .badge-amber {
-  background: rgba(251, 191, 36, 0.12);
+  background: rgba(255, 159, 10, 0.14);
   color: var(--amber);
-  border: 1px solid rgba(251, 191, 36, 0.25);
+  border: none;
 }
-
 .badge-emerald {
-  background: rgba(52, 211, 153, 0.12);
+  background: rgba(48, 209, 88, 0.14);
   color: var(--emerald);
-  border: 1px solid rgba(52, 211, 153, 0.25);
+  border: none;
 }
-
 .badge-rose {
-  background: rgba(251, 113, 133, 0.12);
+  background: rgba(255, 69, 58, 0.14);
   color: var(--rose);
-  border: 1px solid rgba(251, 113, 133, 0.25);
+  border: none;
 }
 
 @media (max-width: 768px) {

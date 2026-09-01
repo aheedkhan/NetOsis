@@ -1,0 +1,21 @@
+# k8s-native firewall agent — manages a CiliumClusterwideNetworkPolicy that
+# denies traffic from blocked source addresses, the Kubernetes-deployment
+# equivalent of the compose deployment's nftables blocklist set.
+FROM docker.io/library/python:3.12-alpine
+
+# Copied in rather than downloaded at build time — dl.k8s.io was
+# unreachably slow from inside the build context in this environment; the
+# host already has a verified-working kubectl binary.
+COPY containers/kubectl-linux-amd64 /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kubectl
+
+WORKDIR /app
+COPY lib /app/lib
+COPY services/k8s_fw_agent /app/services/k8s_fw_agent
+COPY services/__init__.py /app/services/__init__.py
+
+ENV PYTHONPATH=/app/lib:/app \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "services.k8s_fw_agent"]

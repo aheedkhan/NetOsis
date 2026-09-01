@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import type { ActorRow } from "../types";
+import type { ActorRow, Capability } from "../types";
 
 function fmtTime(ts?: string) {
   if (!ts) return "—";
@@ -14,7 +14,30 @@ function shortActor(key: string) {
   return key.length > 24 ? `${key.slice(0, 22)}…` : key;
 }
 
-export function ActorTable({ actors }: { actors: ActorRow[] }) {
+const CAPABILITY_BADGE: Record<Capability, { label: string; cls: string }> = {
+  automated: { label: "Bot", cls: "badge-rose" },
+  scripted: { label: "Unclear", cls: "badge-amber" },
+  interactive_operator: { label: "Human", cls: "badge-emerald" },
+};
+
+function CapabilityBadge({ capability, pHuman }: { capability?: Capability | null; pHuman?: number | null }) {
+  if (!capability) return <span className="dim">—</span>;
+  const meta = CAPABILITY_BADGE[capability];
+  const pct = typeof pHuman === "number" ? ` ${Math.round(pHuman * 100)}%` : "";
+  return (
+    <span className={`badge ${meta.cls}`} title={`p(human) = ${pHuman ?? "?"}`}>
+      {meta.label}{pct}
+    </span>
+  );
+}
+
+export function ActorTable({
+  actors,
+  onSelect,
+}: {
+  actors: ActorRow[];
+  onSelect?: (actorKey: string) => void;
+}) {
   return (
     <motion.section
       className="glass-card panel actor-panel"
@@ -35,6 +58,7 @@ export function ActorTable({ actors }: { actors: ActorRow[] }) {
             <tr>
               <th>#</th>
               <th>Actor</th>
+              <th>Capability</th>
               <th>Events</th>
               <th>Level</th>
               <th>Arm</th>
@@ -49,9 +73,12 @@ export function ActorTable({ actors }: { actors: ActorRow[] }) {
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.04 * i }}
+                className={onSelect ? "actor-row-clickable" : undefined}
+                onClick={() => onSelect?.(a.actor_key)}
               >
                 <td className="mono rank-cell">{i + 1}</td>
                 <td className="mono actor-cell" title={a.actor_key}>{shortActor(a.actor_key)}</td>
+                <td><CapabilityBadge capability={a.capability} pHuman={a.p_human} /></td>
                 <td className="mono events-cell">{a.events.toLocaleString()}</td>
                 <td><span className="badge badge-amber">{a.level}</span></td>
                 <td className="mono">{a.arm}</td>

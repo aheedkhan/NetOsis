@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import os
 from collections import Counter, defaultdict, deque
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +13,71 @@ from typing import Any
 from cs.mappings import enrich_event
 
 _EVENT_CACHE: dict[str, Any] = {}
+
+
+# --------------------------------------------------------------------------
+# Topology-driven zone classification
+# --------------------------------------------------------------------------
+#
+# The org topology (config/topology.json) is the single source of truth for
+# zones and their CIDRs — the same file the firewall rulesets and the k8s
+# NetworkPolicy generator read. Loading it here means the attack map reflects
+# the actual NexusCorp organisation being defended (internet, dmz, corp,
+# datacenter, deception, egress) instead of a hardcoded copy of one
+# deployment's addressing that silently goes stale the moment the topology
+# changes — which is exactly what happened before this: the zone classifier
+# only knew the old single-VLAN lab's 10.200.2.x/10.200.3.x ranges and had no
+# idea a DMZ, a corp LAN or a datacenter existed at all.
+_TOPOLOGY_CACHE: dict[str, Any] | None = None
+
+
+def _load_topology() -> dict[str, Any] | None:
+    global _TOPOLOGY_CACHE
+    if _TOPOLOGY_CACHE is not None:
+        return _TOPOLOGY_CACHE
+    path = Path(os.environ.get("CS_TOPOLOGY", "/config/topology.json"))
+    if not path.exists():
+        # Fall back to the repo-relative path for local (non-container) runs.
+        alt = Path(__file__).resolve().parent.parent.parent / "config" / "topology.json"
+        path = alt if alt.exists() else path
+    try:
+        _TOPOLOGY_CACHE = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        _TOPOLOGY_CACHE = {}
+    return _TOPOLOGY_CACHE
+
+
+def topology_zones() -> list[dict[str, Any]]:
+    """Zones as declared in config/topology.json, for the dashboard's map."""
+    topo = _load_topology() or {}
+    return list(topo.get("zones") or [])
+
+
+def zone_for_ip(ip: str | None) -> str:
+    """Which topology zone an address belongs to, by CIDR membership."""
+    if not ip:
+        return "unknown"
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return "unknown"
+    for zone in topology_zones():
+        cidr = zone.get("cidr")
+        if not cidr:
+            continue
+        try:
+            if addr in ipaddress.ip_network(cidr, strict=False):
+                return zone["id"]
+        except ValueError:
+            continue
+    # Kubernetes deployment: every pod, regardless of zone, shares one flat
+    # pod CIDR (kind's default 10.244.0.0/16) that topology.json cannot
+    # describe per-zone. Falling through to "unknown" there would blank the
+    # map for that deployment entirely, so pod-network addresses are labelled
+    # distinctly instead of silently mis-zoned.
+    if ip.startswith("10.244."):
+        return "k8s-pod"
+    return "unknown"
 
 
 def load_events_tail(path: Path, limit: int) -> list[dict[str, Any]]:
@@ -123,7 +190,12 @@ def actor_profile(events: list[dict], actor_key: str) -> dict[str, Any]:
         lvl = (e.get("session") or {}).get("level")
         if lvl:
             levels[lvl] += 1
-        cmd = ((e.get("extra") or {}).get("shell") or {}).get("command")
+        # new_event(extra=...) merges its dict at the top level of the event
+        # (see cs.events.new_event), not under an "extra" key — ssh_surface
+        # emits extra={"shell": {"command": ...}}, which lands as
+        # event["shell"], not event["extra"]["shell"]. This previously read
+        # the wrong path and so this list was always empty.
+        cmd = ((e.get("shell") or {})).get("command")
         if cmd:
             commands.append(cmd)
     return {
@@ -248,6 +320,13 @@ def top_actors(events: list[dict], limit: int = 12) -> list[dict[str, Any]]:
     levels: dict[str, str] = {}
     techniques: dict[str, Counter[str]] = defaultdict(Counter)
     arms: dict[str, str] = {}
+    source_ips: dict[str, str] = {}
+    # capability/p_human come only from cybersnare.decision.transition events
+    # (see lib/cs/transitions.py) — tracked separately so a later event with no
+    # opinion on capability can't overwrite an earlier real classification.
+    capability: dict[str, str] = {}
+    p_human: dict[str, float] = {}
+    operator_confidence: dict[str, float] = {}
 
     for e in events:
         ak = (e.get("session") or {}).get("actor_key")
@@ -266,6 +345,14 @@ def top_actors(events: list[dict], limit: int = 12) -> list[dict[str, Any]]:
         tid = ((e.get("threat") or {}).get("technique") or {}).get("id")
         if tid:
             techniques[ak][tid] += 1
+        ip = (e.get("source") or {}).get("ip")
+        if ip:
+            source_ips[ak] = ip
+        snap = (e.get("decision") or {}).get("belief_snapshot") or {}
+        if snap.get("capability") is not None:
+            capability[ak] = snap["capability"]
+            p_human[ak] = snap.get("p_human")
+            operator_confidence[ak] = snap.get("operator_confidence")
 
     out: list[dict[str, Any]] = []
     for ak, n in counts.most_common(limit):
@@ -278,6 +365,10 @@ def top_actors(events: list[dict], limit: int = 12) -> list[dict[str, Any]]:
                 "level": levels.get(ak, "—"),
                 "arm": arms.get(ak, "?"),
                 "top_technique": top_tech[0][0] if top_tech else None,
+                "source_ip": source_ips.get(ak),
+                "capability": capability.get(ak),
+                "p_human": p_human.get(ak),
+                "operator_confidence": operator_confidence.get(ak),
             }
         )
     return out
@@ -618,24 +709,23 @@ OPERATION_PHASES: list[dict[str, str]] = [
     {"id": "exfiltration", "label": "Exfiltration / C2", "subtitle": "Callbacks & egress", "color": "#ff453a"},
 ]
 
+# Kept only as the map's fallback labels for a topology.json-less run
+# (offline unit tests, a repo checkout with no config/ present). Whenever
+# topology.json is available — every real deployment — topology_zones()
+# above is authoritative and this is unused.
 NETWORK_ZONES: list[dict[str, str]] = [
-    {"id": "attacker", "label": "Attacker host"},
-    {"id": "egress", "label": "Egress network", "range": "10.200.3.0/24"},
-    {"id": "deception", "label": "Deception VLAN", "range": "10.200.2.0/24"},
-    {"id": "honeypot", "label": "Honeypot target", "range": "10.200.2.10"},
+    {"id": "internet", "label": "Internet"},
+    {"id": "dmz", "label": "DMZ"},
+    {"id": "corp", "label": "Corporate LAN"},
+    {"id": "datacenter", "label": "Datacenter"},
+    {"id": "deception", "label": "Deception"},
+    {"id": "egress", "label": "Egress"},
 ]
 
 
 def _zone_for_ip(ip: str) -> str:
-    if ip.startswith("10.200.3."):
-        return "egress"
-    if ip in ("10.200.2.10", "10.200.2.11"):
-        return "honeypot"
-    if ip.startswith("10.200.2."):
-        return "deception"
-    if ip.startswith("10.200.1."):
-        return "deception"
-    return "attacker"
+    zone = zone_for_ip(ip)
+    return zone if zone != "unknown" else "internet"
 
 
 def _phase_for_step(step: dict[str, Any]) -> str:
@@ -680,7 +770,13 @@ def _build_operation_map(label: str, ip: str, steps: list[dict[str, Any]]) -> di
         lane = phase_lane[phase]
         phase_lane[phase] += 1
         nid = f"op:{i}"
-        target_zone = "honeypot" if step.get("surface") in ("ssh", "https", "shell", "sinkhole") else _zone_for_ip(ip)
+        surface = step.get("surface")
+        if surface in ("ssh", "https", "shell"):
+            target_zone = "deception"
+        elif surface == "sinkhole":
+            target_zone = "egress"
+        else:
+            target_zone = _zone_for_ip(ip)
         op_nodes.append(
             {
                 "id": nid,
@@ -711,9 +807,10 @@ def _build_operation_map(label: str, ip: str, steps: list[dict[str, Any]]) -> di
         )
         prev_id = nid
 
+    zones = topology_zones()
     return {
         "phases": OPERATION_PHASES,
-        "zones": NETWORK_ZONES,
+        "zones": [{"id": z["id"], "label": z["label"], "range": z.get("cidr")} for z in zones] or NETWORK_ZONES,
         "attacker_zone": _zone_for_ip(ip),
         "nodes": op_nodes,
         "edges": op_edges,
@@ -816,7 +913,7 @@ def extract_transitions(events: list[dict]) -> list[dict[str, Any]]:
     for e in events:
         if (e.get("event") or {}).get("dataset") != "cybersnare.decision.transition":
             continue
-        dec = (e.get("extra") or {}).get("decision") or {}
+        dec = e.get("decision") or {}
         out.append(
             {
                 "timestamp": e.get("@timestamp"),
@@ -890,6 +987,46 @@ def dashboard_bundle(events: list[dict], activity: dict[str, Any] | None = None)
         "timeline": timeline(events, max_items=50),
         "analytics": siem_analytics(events),
         "deception": deception_state(events, activity),
+    }
+
+
+def topology_map(events: list[dict]) -> dict[str, Any]:
+    """
+    The organisation map for the dashboard — real zones and hosts from
+    config/topology.json, with every currently-tracked actor placed in the
+    zone its most recent source address actually belongs to. This is the
+    live counterpart to the static docs/figures diagrams: the same shape,
+    populated from what has actually happened rather than drawn once by hand.
+    """
+    topo = _load_topology() or {}
+    zones = topo.get("zones") or NETWORK_ZONES
+    hosts = topo.get("hosts") or []
+
+    actors = top_actors(events, limit=50)
+    placed = []
+    for a in actors:
+        ip = a.get("source_ip")
+        if not ip:
+            continue
+        placed.append(
+            {
+                "actor_key": a["actor_key"],
+                "ip": ip,
+                "zone": zone_for_ip(ip),
+                "events": a["events"],
+                "level": a.get("level"),
+                "capability": a.get("capability"),
+                "p_human": a.get("p_human"),
+                "last_seen": a.get("last_seen"),
+            }
+        )
+
+    return {
+        "org": topo.get("org") or {"name": "NexusCorp Industrial Systems"},
+        "zones": zones,
+        "hosts": hosts,
+        "policy_edges": topo.get("policy_edges") or [],
+        "actors": placed,
     }
 
 

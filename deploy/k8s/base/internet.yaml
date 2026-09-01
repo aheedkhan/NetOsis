@@ -1,0 +1,57 @@
+# cs-internet — the attacker and operator demo pods.
+#
+# Same images and session scripts as the compose deployment
+# (containers/Dockerfile.attacker, scripts/attacker-auto.sh,
+# scripts/human-session.sh). What differs is addressing: there is no VIP/DNAT
+# layer in this deployment, so both pods reach the deception surface by its
+# Kubernetes Service DNS name directly. That is not a weaker test — whether
+# cs-internet can reach cs-deception is entirely decided by the
+# CiliumNetworkPolicy in that namespace, which is real enforcement regardless
+# of whether the address that got you there was a VIP or a Service name.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attacker
+  namespace: cs-internet
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: attacker}
+  template:
+    metadata:
+      labels: {app: attacker}
+    spec:
+      containers:
+        - name: attacker
+          image: localhost/cybersnare-attacker:lab
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: CS_TARGET, value: "sensor.cs-deception.svc.cluster.local"}
+            - {name: CS_SSH_PORT, value: "22"}
+            - {name: CS_HTTPS_PORT, value: "443"}
+          securityContext:
+            capabilities: {add: ["NET_RAW"], drop: ["NET_ADMIN"]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: cs-internet
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: operator}
+  template:
+    metadata:
+      labels: {app: operator}
+    spec:
+      containers:
+        - name: operator
+          image: localhost/cybersnare-attacker:lab
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: CS_TARGET_WWW, value: "www01.cs-dmz.svc.cluster.local"}
+            - {name: CS_TARGET_DEV, value: "sensor.cs-deception.svc.cluster.local"}
+            - {name: CS_ROLE, value: "human"}
+          securityContext:
+            capabilities: {add: ["NET_RAW"], drop: ["NET_ADMIN"]}

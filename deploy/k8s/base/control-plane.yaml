@@ -1,0 +1,245 @@
+# Control plane — logger, decision, gnn-scorer, intelligence, zeek-ingest.
+#
+# Same service code as the compose deployment, unchanged. Only addressing
+# changes: CS_*_HOST env vars point at Kubernetes Service DNS names
+# (name.namespace.svc.cluster.local) instead of the fixed 10.200.1.x addresses
+# compose assigns. Every service already reads its peers from an env var, so
+# this is manifest wiring, not a code change.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: events
+  namespace: cs-control
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: manifests
+  namespace: cs-control
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cs-config
+  namespace: cs-control
+data:
+  CS_POLICY: "P1"
+  CS_GNN_ENABLED: "1"
+  CS_GNN_HOST: "gnn-scorer.cs-control.svc.cluster.local"
+  CS_GNN_PORT: "9100"
+  CS_LOGGER_HOST: "logger.cs-control.svc.cluster.local"
+  CS_LOGGER_PORT: "8088"
+  CS_DECISION_HOST: "decision.cs-control.svc.cluster.local"
+  CS_DECISION_PORT: "9000"
+  # The k8s-native firewall agent (deploy/k8s/base/fw-agent.yaml), one per zone
+  # boundary that can actuate a block — see that manifest for why this differs
+  # from the compose deployment's per-firewall-container model.
+  CS_FIREWALLS: "fw-agent.cs-control.svc.cluster.local:9400"
+  # The compose deployment's decision plane refuses to block anything outside
+  # CS_BLOCKABLE_CIDRS (default 203.0.113.0/24, its simulated Internet) as a
+  # second line of defence against ever blocking its own infrastructure — see
+  # `blockable()` in services/decision. That defence doesn't translate here:
+  # Cilium gives every pod in the cluster one IP from ONE flat pool
+  # (10.244.0.0/16, set in kind-config.yaml) regardless of which namespace it
+  # is in, so there is no CIDR that means "only the attacker/operator pods".
+  # The primary defence in this deployment is instead the port-based capture
+  # filter on the sensor pod (deploy/k8s/base/deception.yaml) that keeps
+  # control-plane traffic from ever being attributed to an actor in the first
+  # place; this is widened to the whole pod CIDR rather than left at the
+  # compose default, which would silently refuse every block in this cluster.
+  CS_BLOCKABLE_CIDRS: "10.244.0.0/16"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logger
+  namespace: cs-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: logger}
+  template:
+    metadata:
+      labels: {app: logger}
+    spec:
+      containers:
+        - name: logger
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.logger"]
+          env:
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_PORT, value: "8088"}
+            - {name: CS_LOG_PATH, value: "/data/events.jsonl"}
+          envFrom:
+            - configMapRef: {name: cs-config}
+          ports: [{containerPort: 8088}]
+          volumeMounts: [{name: events, mountPath: /data}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8088}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: events
+          persistentVolumeClaim: {claimName: events}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logger
+  namespace: cs-control
+spec:
+  selector: {app: logger}
+  ports: [{port: 8088, targetPort: 8088}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decision
+  namespace: cs-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: decision}
+  template:
+    metadata:
+      labels: {app: decision}
+    spec:
+      containers:
+        - name: decision
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.decision"]
+          envFrom:
+            - configMapRef: {name: cs-config}
+          env:
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_PORT, value: "9000"}
+            - {name: CS_CONFIG_DIR, value: "/config"}
+            - {name: CS_MANIFEST_CURRENT, value: "/data/manifests/current.json"}
+            - {name: CS_MANIFEST_SEED, value: "/config/manifest-p0.json"}
+          ports: [{containerPort: 9000}]
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: manifests, mountPath: /data/manifests}
+          readinessProbe:
+            httpGet: {path: /health, port: 9000}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap: {name: cs-manifests}
+        - name: manifests
+          persistentVolumeClaim: {claimName: manifests}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decision
+  namespace: cs-control
+spec:
+  selector: {app: decision}
+  ports: [{port: 9000, targetPort: 9000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gnn-scorer
+  namespace: cs-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: gnn-scorer}
+  template:
+    metadata:
+      labels: {app: gnn-scorer}
+    spec:
+      containers:
+        - name: gnn-scorer
+          image: localhost/cybersnare-gnn:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.gnn_scorer"]
+          envFrom:
+            - configMapRef: {name: cs-config}
+          env:
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_PORT, value: "9100"}
+            - {name: CS_GNN_CHECKPOINT, value: "/data/models/actor-gnn.pt"}
+          ports: [{containerPort: 9100}]
+          volumeMounts: [{name: models, mountPath: /data/models}]
+          resources:
+            requests: {memory: 512Mi, cpu: 250m}
+            limits: {memory: 2Gi, cpu: "2"}
+          readinessProbe:
+            httpGet: {path: /health, port: 9100}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: models
+          configMap:
+            name: cs-gnn-model
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gnn-scorer
+  namespace: cs-control
+spec:
+  selector: {app: gnn-scorer}
+  ports: [{port: 9100, targetPort: 9100}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intelligence
+  namespace: cs-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: intelligence}
+  template:
+    metadata:
+      labels: {app: intelligence}
+    spec:
+      containers:
+        - name: intelligence
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.intelligence"]
+          envFrom:
+            - configMapRef: {name: cs-config}
+          env:
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_PORT, value: "8090"}
+            - {name: CS_LOG_PATH, value: "/data/events.jsonl"}
+            - {name: CS_EVENT_TAIL, value: "15000"}
+          ports: [{containerPort: 8090}]
+          volumeMounts: [{name: events, mountPath: /data, readOnly: true}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8090}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: events
+          persistentVolumeClaim: {claimName: events}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligence
+  namespace: cs-control
+spec:
+  selector: {app: intelligence}
+  ports: [{port: 8090, targetPort: 8090, nodePort: 30890}]
+  type: NodePort

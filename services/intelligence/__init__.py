@@ -19,6 +19,7 @@ from cs.intelligence import (
     milestone_report,
     siem_analytics,
     timeline,
+    topology_map,
 )
 from cs.tinyhttp import serve
 
@@ -95,6 +96,8 @@ async def handler(req: dict) -> tuple[int, dict[str, str], bytes]:
         return _json(deception_state(events, activity))
     if method == "GET" and path == "/v1/graph":
         return _json(attack_graph_overview(_events()))
+    if method == "GET" and path == "/v1/topology":
+        return _json(topology_map(_events()))
     if method == "GET" and path == "/v1/graph/actor":
         actor_key = None
         if "key=" in req.get("query", ""):

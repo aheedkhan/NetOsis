@@ -81,3 +81,9 @@ docs/build/*.txt
 # Dashboard UI build artefacts
 deploy/dashboard-ui/node_modules/
 deploy/dashboard/assets/
+containers/kubectl-linux-amd64
+
+# Generated k8s manifests — derived from config/topology.json and config/*.json
+# by deploy/k8s/generate-*.py; deploy/k8s/deploy.sh regenerates them, so a
+# checked-in copy would just go stale relative to the generators.
+deploy/k8s/generated/

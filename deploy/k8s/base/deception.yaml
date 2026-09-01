@@ -1,0 +1,125 @@
+# Deception zone — sensor + ssh + http + zeek-ingest, one Pod.
+#
+# Compose shares one network namespace across separate containers via
+# `network_mode: service:sensor`, a workaround for the fact that a compose
+# bridge network can't be sniffed by a third container. A Kubernetes Pod
+# already IS one network namespace shared across its containers, so the same
+# arrangement here needs no workaround at all — just four containers in one
+# Pod spec. zeek-ingest additionally needs filesystem access to the Zeek logs,
+# so an emptyDir volume stands in for compose's data/zeek bind mount.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sensor
+  namespace: cs-deception
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: sensor}
+  template:
+    metadata:
+      labels: {app: sensor}
+    spec:
+      containers:
+        - name: zeek
+          image: localhost/cybersnare-zeek:lab
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: CS_ZEEK_IFACE, value: eth0}
+            # No CS_RETURN_ROUTES here — unlike the compose deployment, a
+            # Kubernetes Service is reached over the pod network directly, so
+            # there is no rootless-port-forward loopback path that needs an
+            # explicit return route. See sensor/zeek/entrypoint.sh.
+            #
+            # The default capture filter in that entrypoint excludes compose's
+            # fixed 10.200.1.0/24 management CIDR, which is meaningless here —
+            # this pod's control-plane calls (to logger/decision/gnn Services)
+            # travel over the cluster's Service/pod network instead, and would
+            # be captured as adversary telemetry with no filter at all, the
+            # exact self-surveillance bug fixed for the compose deployment.
+            # Excluding by PORT rather than by address is CNI-independent:
+            # ssh-surface and http-surface only ever dial 8088/9000/9100 as a
+            # client, and an adversary never legitimately reaches those ports
+            # on 2222/8443, so this is unambiguous either way.
+            - name: CS_CAPTURE_FILTER
+              value: "not (port 8088 or port 9000 or port 9100) and not arp and not ip6"
+          securityContext:
+            capabilities:
+              add: ["NET_RAW", "NET_ADMIN"]
+          volumeMounts:
+            - {name: zeek-logs, mountPath: /zeek/logs}
+        - name: ssh-surface
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.ssh_surface"]
+          # cs-config lives in cs-control; ConfigMaps are namespace-scoped, so a
+          # Deployment in this namespace cannot reference it directly. The
+          # handful of values these containers actually need are inlined
+          # instead of duplicating the whole ConfigMap into every namespace.
+          env:
+            - {name: CS_LOGGER_HOST, value: "logger.cs-control.svc.cluster.local"}
+            - {name: CS_LOGGER_PORT, value: "8088"}
+            - {name: CS_DECISION_HOST, value: "decision.cs-control.svc.cluster.local"}
+            - {name: CS_DECISION_PORT, value: "9000"}
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_PORT, value: "2222"}
+            - name: CS_SELF_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: CS_ARM, value: "A"}
+            - {name: CS_LEVEL, value: "L1"}
+            - {name: CS_MANIFEST_ID, value: "p0-static-v1"}
+          volumeMounts:
+            - {name: shell-users, mountPath: /config/shell-users.json, subPath: shell-users.json, readOnly: true}
+        - name: http-surface
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.http_surface"]
+          # cs-config lives in cs-control; ConfigMaps are namespace-scoped, so a
+          # Deployment in this namespace cannot reference it directly. The
+          # handful of values these containers actually need are inlined
+          # instead of duplicating the whole ConfigMap into every namespace.
+          env:
+            - {name: CS_LOGGER_HOST, value: "logger.cs-control.svc.cluster.local"}
+            - {name: CS_LOGGER_PORT, value: "8088"}
+            - {name: CS_DECISION_HOST, value: "decision.cs-control.svc.cluster.local"}
+            - {name: CS_DECISION_PORT, value: "9000"}
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_HTTPS_PORT, value: "8443"}
+            - name: CS_SELF_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: CS_ARM, value: "A"}
+            - {name: CS_LEVEL, value: "L1"}
+            - {name: CS_MANIFEST_ID, value: "p0-static-v1"}
+        - name: zeek-ingest
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.zeek_ingest"]
+          # cs-config lives in cs-control; ConfigMaps are namespace-scoped, so a
+          # Deployment in this namespace cannot reference it directly. The
+          # handful of values these containers actually need are inlined
+          # instead of duplicating the whole ConfigMap into every namespace.
+          env:
+            - {name: CS_LOGGER_HOST, value: "logger.cs-control.svc.cluster.local"}
+            - {name: CS_LOGGER_PORT, value: "8088"}
+            - {name: CS_DECISION_HOST, value: "decision.cs-control.svc.cluster.local"}
+            - {name: CS_DECISION_PORT, value: "9000"}
+            - {name: CS_ZEEK_LOG_DIR, value: "/zeek/logs"}
+            - {name: CS_ARM, value: "A"}
+            - {name: CS_LEVEL, value: "L1"}
+            - {name: CS_MANIFEST_ID, value: "p0-static-v1"}
+          volumeMounts:
+            - {name: zeek-logs, mountPath: /zeek/logs}
+      volumes:
+        - {name: zeek-logs, emptyDir: {}}
+        - {name: shell-users, configMap: {name: cs-shell-users}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sensor
+  namespace: cs-deception
+spec:
+  selector: {app: sensor}
+  ports:
+    - {name: ssh, port: 22, targetPort: 2222}
+    - {name: https, port: 443, targetPort: 8443}

@@ -253,6 +253,42 @@ case "$cmd" in
       podman exec "$name" python3 -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:9400/v1/blocked',timeout=3).read().decode())" 2>/dev/null || echo "  unreachable"
     done
     ;;
+  k8s-cluster-up)
+    command -v kind >/dev/null 2>&1 || { echo "kind not found — see deploy/k8s/README.md" >&2; exit 1; }
+    kind get clusters 2>/dev/null | grep -qx cybersnare && { echo "cluster 'cybersnare' already exists"; exit 0; }
+    kind create cluster --config "$ROOT/deploy/k8s/cluster/kind-config.yaml"
+    ;;
+  k8s-cilium-install)
+    command -v cilium >/dev/null 2>&1 || { echo "cilium CLI not found — see deploy/k8s/README.md" >&2; exit 1; }
+    cilium install --context kind-cybersnare \
+      --set hubble.relay.enabled=true --set hubble.ui.enabled=false \
+      --set kubeProxyReplacement=true --set ipam.mode=kubernetes
+    ;;
+  k8s-status)
+    cilium status --context kind-cybersnare
+    kubectl --context kind-cybersnare get pods -A
+    ;;
+  k8s-up)
+    exec "$ROOT/deploy/k8s/deploy.sh"
+    ;;
+  k8s-verify)
+    exec "$ROOT/deploy/k8s/verify.sh"
+    ;;
+  k8s-down)
+    kind delete cluster --name cybersnare
+    ;;
+  k8s-attacker)
+    ATTACKER_POD="$(kubectl --context kind-cybersnare -n cs-internet get pod -l app=attacker -o jsonpath='{.items[0].metadata.name}')"
+    kubectl --context kind-cybersnare -n cs-internet exec "$ATTACKER_POD" -- /opt/cs/attacker-auto.sh
+    ;;
+  k8s-operator)
+    OPERATOR_POD="$(kubectl --context kind-cybersnare -n cs-internet get pod -l app=operator -o jsonpath='{.items[0].metadata.name}')"
+    kubectl --context kind-cybersnare -n cs-internet exec "$OPERATOR_POD" -- bash /opt/cs/human-session.sh
+    ;;
+  k8s-blocked)
+    kubectl --context kind-cybersnare -n cs-control exec deploy/fw-agent -- \
+      python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:9400/v1/blocked',timeout=3).read().decode())"
+    ;;
   bootstrap-lab)
     exec sudo "$ROOT/deploy/scripts/bootstrap-lab.sh"
     ;;

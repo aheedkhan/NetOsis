@@ -8,11 +8,13 @@ import { EventVolumeChart } from "./components/EventVolumeChart";
 import { JsonPanel } from "./components/JsonPanel";
 import { LevelDonut } from "./components/LevelDonut";
 import { LiveLogStream } from "./components/LiveLogStream";
+import { NetworkMap } from "./components/NetworkMap";
 import { SiemBarChart } from "./components/SiemBarChart";
 import { StatsGrid } from "./components/StatsGrid";
 import { Timeline } from "./components/Timeline";
 import { VisualsSection } from "./sections/VisualsSection";
 import { useDashboard } from "./useDashboard";
+import { useTopology } from "./useTopology";
 import { CHART } from "./charts/theme";
 import "./App.css";
 
@@ -45,13 +47,9 @@ function Header({
   return (
     <motion.header className="header siem-header" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}>
       <div className="header-brand">
-        <motion.div
-          className="logo-mark"
-          animate={{ boxShadow: ["0 0 0 0 rgba(34,211,238,0.4)", "0 0 0 12px rgba(34,211,238,0)"] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <Shield size={22} strokeWidth={2.2} />
-        </motion.div>
+        <div className="logo-mark">
+          <Shield size={20} strokeWidth={2.2} />
+        </div>
         <div>
           <h1>CyberSnare SOC</h1>
           <p className="header-sub">Intelligence Plane · SIEM analytics · dynamic deception</p>
@@ -119,6 +117,16 @@ function eventRate(volume: { total: number; ts: number }[]) {
 export default function App() {
   const [section, setSection] = useState<AppSection>("overview");
   const { data, loading, error, lastRefresh, refresh } = useDashboard();
+  const topology = useTopology(true);
+  const [pendingActor, setPendingActor] = useState<string | undefined>();
+
+  // Clicking an actor anywhere in the SOC view (the map, a table row) jumps
+  // to the attack-map tab with that actor pre-selected — one entity, one
+  // click, straight to its own log and diagram rather than a separate search.
+  function selectActor(actorKey: string) {
+    setPendingActor(actorKey);
+    setSection("visuals");
+  }
 
   return (
     <>
@@ -176,11 +184,13 @@ export default function App() {
                   </Panel>
                 </div>
 
+                <NetworkMap topology={topology} onSelectActor={selectActor} />
+
                 <div className="siem-row">
                   <Panel title="Experimental arms" subtitle="Milestone 1 A/B/C comparison" className="span-2">
                     <ArmComparisonChart arms={data.report.arms} />
                   </Panel>
-                  <ActorTable actors={data.analytics.top_actors} />
+                  <ActorTable actors={data.analytics.top_actors} onSelect={selectActor} />
                 </div>
 
                 <JsonPanel report={data.report} />
@@ -192,6 +202,7 @@ export default function App() {
                 deception={data.deception}
                 enabled
                 refreshKey={lastRefresh?.toISOString()}
+                initialActor={pendingActor}
               />
             )}
 
@@ -204,8 +215,8 @@ export default function App() {
 
             {section === "actors" && (
               <div className="siem-row">
-                <Panel title="Top actors" subtitle="By event volume — milestone study" className="span-2">
-                  <ActorTable actors={data.analytics.top_actors} />
+                <Panel title="Top actors" subtitle="By event volume — milestone study — click a row for its attack story" className="span-2">
+                  <ActorTable actors={data.analytics.top_actors} onSelect={selectActor} />
                 </Panel>
               </div>
             )}

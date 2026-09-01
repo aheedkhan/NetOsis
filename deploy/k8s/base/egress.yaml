@@ -1,0 +1,99 @@
+# Egress zone — stage-0 sinkhole and the isolated sandbox.
+#
+# The sinkhole gets a fixed ClusterIP inside the cluster's service range
+# (10.96.0.0/16, set in kind-config.yaml) so the sandbox's DNS resolver can
+# point at a stable address without a chicken-and-egg dependency on the
+# sinkhole's Service existing first when this file is applied.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sinkhole
+  namespace: cs-egress
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: sinkhole}
+  template:
+    metadata:
+      labels: {app: sinkhole}
+    spec:
+      containers:
+        - name: sinkhole
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "services.sinkhole"]
+          # cs-config lives in cs-control; ConfigMaps are namespace-scoped, so a
+          # Deployment in this namespace cannot reference it directly. The
+          # handful of values these containers actually need are inlined
+          # instead of duplicating the whole ConfigMap into every namespace.
+          env:
+            - {name: CS_LOGGER_HOST, value: "logger.cs-control.svc.cluster.local"}
+            - {name: CS_LOGGER_PORT, value: "8088"}
+            - {name: CS_DECISION_HOST, value: "decision.cs-control.svc.cluster.local"}
+            - {name: CS_DECISION_PORT, value: "9000"}
+            - {name: CS_BIND, value: "0.0.0.0"}
+            - {name: CS_HTTP_PORT, value: "80"}
+            - {name: CS_DNS_PORT, value: "53"}
+            - name: CS_SELF_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: CS_ARM, value: "A"}
+            - {name: CS_LEVEL, value: "L1"}
+            - {name: CS_MANIFEST_ID, value: "p0-static-v1"}
+          ports:
+            - {containerPort: 80}
+            - {containerPort: 53, protocol: UDP}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sinkhole
+  namespace: cs-egress
+spec:
+  clusterIP: 10.96.0.53
+  selector: {app: sinkhole}
+  ports:
+    - {name: http, port: 80, targetPort: 80}
+    - {name: dns, port: 53, targetPort: 53, protocol: UDP}
+---
+# Sandbox — the interactive_operator engagement surface once a manifest opens
+# the shell. Same isolation as the compose deployment: all capabilities
+# dropped, no new privileges, read-only root, a tiny tmpfs, tight resource
+# limits, and DNS forced to the sinkhole so it cannot resolve anything else.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox
+  namespace: cs-egress
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: sandbox}
+  template:
+    metadata:
+      labels: {app: sandbox}
+    spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers: ["10.96.0.53"]
+        options:
+          - {name: ndots, value: "1"}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: sandbox
+          image: localhost/cybersnare-python:lab
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          securityContext:
+            capabilities: {drop: ["ALL"]}
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          resources:
+            requests: {memory: 32Mi, cpu: 10m}
+            limits: {memory: 64Mi, cpu: 200m, ephemeral-storage: 32Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}

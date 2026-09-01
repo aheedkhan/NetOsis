@@ -1,0 +1,33 @@
+# CyberSnare kind cluster.
+#
+# The default CNI (kindnet) does not enforce NetworkPolicy — it only wires pod
+# routing. Segmentation between zones has to be real, not declared, so the
+# default CNI is disabled here and Cilium is installed separately
+# (deploy/k8s/cluster/install-cilium.sh) as an eBPF dataplane that both
+# enforces every NetworkPolicy and gives Hubble flow visibility into every
+# accept and deny — the packet-level evidence stream this project's whole
+# argument depends on, running on standard, production-grade tooling instead
+# of a hand-rolled equivalent.
+#
+# Three nodes so the topology has somewhere to place zones. kind's own pod
+# network is still flat across nodes (that is what Cilium's overlay is for);
+# node placement here is about being able to demonstrate "this runs across a
+# cluster", not about node-level network isolation — isolation is the
+# NetworkPolicy layer's job, not the node's.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: cybersnare
+networking:
+  disableDefaultCNI: true
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/16"
+nodes:
+  - role: control-plane
+    labels:
+      cybersnare.io/role: control
+  - role: worker
+    labels:
+      cybersnare.io/role: dmz-corp
+  - role: worker
+    labels:
+      cybersnare.io/role: deception

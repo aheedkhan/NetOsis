@@ -43,6 +43,8 @@ export type VolumePoint = {
   other?: number;
 };
 
+export type Capability = "automated" | "scripted" | "interactive_operator";
+
 export type ActorRow = {
   actor_key: string;
   events: number;
@@ -50,6 +52,55 @@ export type ActorRow = {
   level: string;
   arm: string;
   top_technique?: string | null;
+  source_ip?: string | null;
+  capability?: Capability | null;
+  p_human?: number | null;
+  operator_confidence?: number | null;
+};
+
+export type TopologyZone = {
+  id: string;
+  label: string;
+  cidr?: string;
+  trust?: string;
+  row?: number;
+  note?: string;
+};
+
+export type TopologyHost = {
+  id: string;
+  label: string;
+  zone: string;
+  ip: string;
+  kind: string;
+  services?: string[];
+  note?: string;
+};
+
+export type TopologyPolicyEdge = {
+  from: string;
+  to: string;
+  verdict: "allow" | "deny" | "restricted" | "containment";
+  detail?: string;
+};
+
+export type TopologyActor = {
+  actor_key: string;
+  ip: string;
+  zone: string;
+  events: number;
+  level?: string | null;
+  capability?: Capability | null;
+  p_human?: number | null;
+  last_seen?: string | null;
+};
+
+export type TopologyMap = {
+  org: { name: string; domain?: string };
+  zones: TopologyZone[];
+  hosts: TopologyHost[];
+  policy_edges: TopologyPolicyEdge[];
+  actors: TopologyActor[];
 };
 
 export type SiemAnalytics = {

@@ -58,7 +58,14 @@ on the verdict.
 ```
 
 `./cs monitor` shows both in real time; the SIEM dashboard is at
-`http://127.0.0.1:18090/`.
+`http://127.0.0.1:18090/`. Its **Overview** tab includes a live network map —
+every zone and host from `config/topology.json`, with each tracked address
+placed in the zone its traffic actually originates from and colour-coded by
+the operator classifier's verdict (green = human, red = bot, amber =
+unclear). Click any address — on the map or in the actor table — to jump
+straight to its own event timeline and attack-step diagram (the **Attack
+map** tab), the "IP as an entity" view: one click from a source address to
+everything it did.
 
 ## Topology
 
@@ -101,11 +108,10 @@ The published address block, as an outside actor discovers it:
 | `203.0.113.12` | vpn.nexuscorp.example | `vpn01` — SSL-VPN portal (TLS) |
 | `203.0.113.20` | dev.nexuscorp.example | `cs-sensor` — **the deception surface**, ports 22/443 |
 
-`config/topology.json` records the zone/host/firewall-policy map that the compose
-topology and the firewall rulesets implement. It is intended as the shared source
-the dashboard and PDF figures read from rather than hardcoding the map a second
-time — that wiring is not done yet; today it is documentation and a build-time
-reference, not something the running services consume.
+`config/topology.json` is the single source of truth for the zone/host/policy
+map — the firewall rulesets, the k8s NetworkPolicy generator, and the
+dashboard's live network map (`GET /v1/topology` on the intelligence service)
+all read the same file rather than each hardcoding their own copy of it.
 
 ## Why not Cowrie?
 
@@ -163,15 +169,38 @@ rules — rather than any hand-labelled corpus, since none exists for a honeypot
 that has not been deployed yet. See the module docstring for why that is an
 honest design rather than a shortcut.
 
-## Production deployment (2× Ubuntu + k3s)
+## Kubernetes deployment
 
-This repo's `./cs up` topology is the full simulation on **one machine** — every
-zone is a container, every firewall is a container. `deploy/org/` is a different,
-not-yet-built thing: a production-shaped layout across **two real servers**
-(`cs-edge` with a real public site and firewall, `cs-lab` running k3s), connected
-by WireGuard. See `deploy/org/TOPOLOGY.md` and `deploy/k8s/README.md` — that
-scaffolding is unstarted (`deploy/k8s/` is manifests only, nothing has been run
-against a cluster).
+The same design, on a real local cluster instead of Podman bridges: a `kind`
+cluster with Cilium/Hubble as the CNI, every zone in `config/topology.json` as
+a Kubernetes namespace, segmentation enforced by `CiliumNetworkPolicy` (eBPF,
+genuinely dropped packets — not a declared intention), and the same service
+code deployed unchanged. Verified this session: full pod rollout across every
+namespace, `deploy/k8s/verify.sh` proving 8/8 real containment checks (both
+directions — the correct blocks blocked, the correct allows allowed), and the
+bot-vs-human classifier + firewall block working end to end against the
+cluster's flat pod network.
+
+```bash
+./cs k8s-cluster-up && ./cs k8s-cilium-install && ./cs k8s-status   # wait for Cilium
+./cs k8s-up && ./deploy/k8s/verify.sh
+./cs k8s-attacker    # or: ./cs k8s-operator
+```
+
+See `deploy/k8s/README.md` for the design (why Cilium, why namespaces instead
+of multi-homed firewall containers, what differs from the compose deployment)
+and its own **Status** section for what is not yet wired (a Hubble→canonical-
+event adapter, so perimeter flow telemetry joins the same JSONL log the
+compose deployment's `fw_agent` writes to — segmentation itself does not
+depend on it).
+
+## Production deployment (2× Ubuntu, org-shaped)
+
+A third, separate thing from either of the above: `deploy/org/` is a
+production-shaped layout across **two real servers** (`cs-edge` with a real
+public site and firewall, `cs-lab` running k3s), connected by WireGuard. See
+`deploy/org/TOPOLOGY.md` — this one is scaffolding only; nothing in it has
+been run against real hardware.
 
 | Arm | `CS_POLICY` | What decides escalation |
 |-----|-------------|-------------------------|

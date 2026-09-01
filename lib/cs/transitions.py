@@ -39,6 +39,14 @@ def transition_event(
                     "behavioural_score": belief.get("behavioural_score"),
                     "suspicion": belief.get("suspicion"),
                     "intent": belief.get("intent"),
+                    # Operator classification — computed in lib/cs/operator.py,
+                    # carried on the belief state, but otherwise never reaches
+                    # the JSONL system of record. Without this the intelligence
+                    # plane cannot show bot-vs-human at all, since it reads only
+                    # the event log, not decision's live in-memory state.
+                    "capability": belief.get("capability"),
+                    "p_human": belief.get("p_human"),
+                    "operator_confidence": belief.get("operator_confidence"),
                 },
             },
         },
