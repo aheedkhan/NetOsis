@@ -50,7 +50,11 @@ done
 # loopback clause and ARP/IPv6 noise leaks back in everywhere outside the
 # management subnet — caught by testing this against a live capture, not by
 # reading it.
-CS_CAPTURE_FILTER="${CS_CAPTURE_FILTER:-(not net 10.200.1.0/24 or (src host 10.200.1.20 and dst host 10.200.1.20)) and not arp and not ip6}"
+# 10.200.9.0/24 is the llm bridge — ssh-surface (sharing this netns) uses it
+# to reach the host's Ollama instance for the dynamic shell fallback, and
+# that call would otherwise be captured as if it were adversary traffic,
+# same class of bug as the earlier management-plane self-surveillance fix.
+CS_CAPTURE_FILTER="${CS_CAPTURE_FILTER:-(not net 10.200.1.0/24 or (src host 10.200.1.20 and dst host 10.200.1.20)) and not net 10.200.9.0/24 and not arp and not ip6}"
 echo "zeek capturing any, filter: ${CS_CAPTURE_FILTER}" >&2
 # Rootless published ports land on lo, not the deception veth.
 exec tcpdump -i any -U -s 0 -w - ${CS_CAPTURE_FILTER} 2>/dev/null \

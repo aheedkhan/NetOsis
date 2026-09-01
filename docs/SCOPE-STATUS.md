@@ -22,6 +22,7 @@ what is deliberately deferred, and what is **out of scope** for milestone 1.
 | L3 populated filesystem + honeytoken internal hop | P6 (pulled forward) | **Done** — `lib/cs/virtual_fs.py` layered L2/L3 tree, `cybersnare.shell.file_access` telemetry, `credential_file_read`/`internal_hop_attempt` patterns in `lib/cs/patterns.py` |
 | Slow-path intent inference | P3 | **Done** — rules + optional LLM (`CS_LLM_ENABLED=1`) |
 | BURN manifest | P3 | **Done** — `manifest-burn.json`, P1/P2 suspicion path |
+| Dynamic shell fallback for unscripted commands | P3 | **Done** — `lib/cs/shell_llm.py`, Ollama-backed, off the decision plane's fast path, memoized per (cwd, command), `llm_generated` telemetry flag |
 
 ## In scope but not yet complete
 
@@ -31,7 +32,7 @@ what is deliberately deferred, and what is **out of scope** for milestone 1.
 | ≥4 weeks three-arm data collection | P5 | Scripts ready (`./cs collect`, `./cs redteam`); collection not run |
 | Human realism study (5 participants) | P5 | Optional per design record §11.7 |
 | Suricata enricher | P1 | **Explicitly deferrable** per execution plan §11.3 |
-| LLM with grammar-constrained decoding | P3 | Optional OpenAI-compatible path; no local Qwen host |
+| LLM with grammar-constrained decoding | P3 | A local Qwen3 host is now wired (Ollama, `lib/cs/shell_llm.py`); grammar-constrained decoding itself is not applied — output shape is enforced by prompt + regex strip instead |
 | Stage-1 egress | P5 optional | Not built (by design until approved) |
 
 ## Milestone 1 lab package (P4–P5 artefacts)

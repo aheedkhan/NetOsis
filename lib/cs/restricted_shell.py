@@ -70,6 +70,12 @@ class CommandResult:
     logout: bool = False
     vm_check: bool = False
     touch: FileTouch | None = None
+    # Set only for a genuinely unrecognised command (not the deliberate
+    # deny-list — nc/python/etc are meant to look present-but-broken, not
+    # improvised). The caller (ssh_surface) decides whether to route this
+    # through the LLM fallback or just print `output` as-is; RestrictedShell
+    # itself stays synchronous and knows nothing about Ollama.
+    needs_llm: bool = False
 
 
 class RestrictedShell:
@@ -140,7 +146,16 @@ class RestrictedShell:
             return self._file(args)
         if any(tok in line.lower() for tok in _VM_CHECK_TOKENS):
             return self._vm_check(cmd, args)
-        return CommandResult(f"bash: {cmd}: command not found\n")
+        return CommandResult(f"bash: {cmd}: command not found\n", needs_llm=True)
+
+    def listing_names(self) -> list[str]:
+        """Names visible in the current directory — the LLM fallback's only
+        grounding in the authored tree, so it extends the story instead of
+        contradicting it."""
+        result = self._fs().resolve(self.cwd, self.cwd)
+        if not result.visible or not result.node.is_dir():
+            return []
+        return sorted(c.name for c in self._fs().listing(result.node))
 
     # -- filesystem-aware commands ------------------------------------------
 

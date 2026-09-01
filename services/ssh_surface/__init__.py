@@ -9,10 +9,11 @@ import uuid
 
 import asyncssh
 
+from cs import shell_llm
 from cs.events import new_event
 from cs.ingest import emit_bg
 from cs.manifest import auth_mode, level as manifest_level, manifest_id, poll_forever, wait_ready
-from cs.restricted_shell import FileTouch, RestrictedShell, load_users
+from cs.restricted_shell import CommandResult, FileTouch, RestrictedShell, load_users
 from cs.tinyhttp import wait_http
 
 BIND = os.environ.get("CS_BIND", "0.0.0.0")
@@ -169,15 +170,34 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
         # (the pattern matcher and timeline both group by it).
         self._session_id = str(uuid.uuid4())
         self._shell = RestrictedShell(level=manifest_level())
+        # asyncssh's session callbacks (data_received, session_started) are
+        # plain synchronous methods — see cs.shell_llm's module docstring for
+        # why the LLM fallback cannot run inline on them. While a fallback
+        # call is in flight, further typed lines queue in _buf rather than
+        # being processed out of order; _drain_buffer() resumes them once the
+        # pending task finishes and writes its own output.
+        self._llm_busy = False
+        self._exec_mode = False
 
     def connection_made(self, chan: asyncssh.SSHServerSessionChannel) -> None:
         self._chan = chan
+
+    def eof_received(self) -> bool:
+        # A non-interactive `ssh host cmd` client closes its stdin (sends
+        # EOF) right after the exec request, well before any reply arrives.
+        # asyncssh's default eof_received() returns False, which tears the
+        # channel down immediately on that EOF — fatal for the LLM fallback,
+        # whose reply is written from an asyncio task seconds later, long
+        # after this callback fires. Returning True keeps the channel half
+        # open (write-only) so that reply still has somewhere to land.
+        return True
 
     def shell_requested(self) -> bool:
         return True
 
     def exec_requested(self, command: str) -> bool:
         self._exec_cmd = command
+        self._exec_mode = True
         return True
 
     def pty_requested(
@@ -188,11 +208,8 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
     def session_started(self) -> None:
         if not self._chan:
             return
-        if self._exec_cmd:
-            result = self._run(self._exec_cmd.strip())
-            if result and result != "logout\n":
-                self._chan.write(result.replace("\n", "\r\n"))
-            self._chan.exit(0)
+        if self._exec_mode:
+            self._dispatch(self._exec_cmd.strip())
             return
         self._chan.write(f"\r\nWelcome {self._username}@intranet-web-01\r\n$ ")
 
@@ -200,32 +217,79 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
         if not self._chan:
             return
         self._buf += data.replace("\r", "")
+        self._drain_buffer()
+
+    def _drain_buffer(self) -> None:
+        if self._llm_busy or not self._chan:
+            return
         while "\n" in self._buf:
             line, self._buf = self._buf.split("\n", 1)
-            result = self._run(line)
-            if result == "logout\n":
-                self._chan.write("\r\n")
-                self._chan.exit(0)
-                return
-            if result:
-                self._chan.write(result.replace("\n", "\r\n"))
-            self._chan.write("$ ")
+            if self._dispatch(line):
+                return  # logout, or an async fallback now owns the channel
 
-    def _run(self, line: str) -> str:
-        """Run one line against the session's own shell state and report it."""
+    def _dispatch(self, line: str) -> bool:
+        """Run one line. Returns True if the caller should stop draining
+        _buf — either the session is ending, or an async LLM task now owns
+        writing the response and will resume draining itself when it's done."""
         if not line.strip():
-            return ""
-        # A live escalation mid-session (a decision-plane transition while the
-        # attacker is already connected) has to open the deeper filesystem
-        # immediately, the same way the manifest already reopens other
-        # capabilities without requiring a fresh connection.
+            if self._exec_mode:
+                self._chan.exit(0)
+            else:
+                self._chan.write("$ ")
+            return True
+        # A live escalation mid-session (a decision-plane transition while
+        # the attacker is already connected) has to open the deeper
+        # filesystem immediately, the same way the manifest already reopens
+        # other capabilities without requiring a fresh connection.
         self._shell.set_level(manifest_level())
         result = self._shell.handle_line(line)
+
+        if result.needs_llm and shell_llm.ENABLED:
+            self._llm_busy = True
+            asyncio.create_task(self._run_llm_fallback(line, result))
+            return True
+
         self._emit_command(line, result.touch, vm_check=result.vm_check)
-        return "logout\n" if result.logout else result.output
+        if result.logout:
+            self._chan.write("\r\n")
+            self._chan.exit(0)
+            return True
+        if self._exec_mode:
+            if result.output:
+                self._chan.write(result.output.replace("\n", "\r\n"))
+            self._chan.exit(0)
+            return True
+        if result.output:
+            self._chan.write(result.output.replace("\n", "\r\n"))
+        self._chan.write("$ ")
+        return False
+
+    async def _run_llm_fallback(self, line: str, fallback: CommandResult) -> None:
+        cwd = self._shell.cwd
+        listing = self._shell.listing_names()
+        text = await shell_llm.improvise(line, cwd, listing)
+        self._llm_busy = False
+        if not self._chan:
+            return
+        output = f"{text}\n" if text else fallback.output
+        self._emit_command(line, None, vm_check=False, llm_generated=bool(text))
+        if self._exec_mode:
+            if output:
+                self._chan.write(output.replace("\n", "\r\n"))
+            self._chan.exit(0)
+            return
+        if output:
+            self._chan.write(output.replace("\n", "\r\n"))
+        self._chan.write("$ ")
+        self._drain_buffer()
 
     def _emit_command(
-        self, cmd: str, touch: FileTouch | None, *, vm_check: bool = False
+        self,
+        cmd: str,
+        touch: FileTouch | None,
+        *,
+        vm_check: bool = False,
+        llm_generated: bool = False,
     ) -> None:
         src_ip, src_port = self._peer
         dataset = "cybersnare.shell.command"
@@ -271,6 +335,11 @@ class RestrictedShellSession(asyncssh.SSHServerSession):
                 "action": touch.action,
                 "sensitivity": touch.sensitivity,
             }
+        if llm_generated:
+            # A command outside the scripted dispatch table is itself weak
+            # evidence of a more capable operator — someone who only ever
+            # runs whoami/ls/cat never exercises this path at all.
+            shell_extra["llm_generated"] = True
 
         emit_bg(
             new_event(
