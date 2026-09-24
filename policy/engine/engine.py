@@ -26,6 +26,10 @@ def _load_rules(path_str: str) -> dict[str, Any]:
         return yaml.safe_load(fh) or {}
 
 
+def clear_rules_cache() -> None:
+    _load_rules.cache_clear()
+
+
 def score_events(events: list[dict[str, Any]], rules_path: str | Path | None = None) -> float:
     path = Path(rules_path) if rules_path else DEFAULT_RULES
     rules = _load_rules(str(path))
@@ -33,12 +37,10 @@ def score_events(events: list[dict[str, Any]], rules_path: str | Path | None = N
     total = 0.0
     seen: set[str] = set()
     for event in events:
-        # Prefer explicit category from mapper path via behavior heuristics
         category = event.get("risk_category")
         if not category:
-            # Fallback from technique families used in slice
             tech = event.get("technique")
-            if tech in {"T1033", "T1083"}:
+            if tech in {"T1033", "T1083", "T1057", "T1016"}:
                 category = "Discovery"
             elif tech == "T1005":
                 category = "Collection"
@@ -74,18 +76,36 @@ def evaluate(
     score = score_events(events, path)
     level = risk_level(score)
     triggered = already_triggered or set()
-    threshold = float(rules.get("d01_threshold", 3))
     actions = rules.get("actions") or {}
+    ladder = rules.get("ladder") or []
 
-    if "D01" not in triggered and score >= threshold:
-        meta = actions.get("D01") or {}
-        return PolicyDecision(
-            action="D01",
-            action_name=str(meta.get("name", "expose_fake_host")),
-            risk_score=score,
-            level=level,
-            reason=f"score {score} >= D01 threshold {threshold}",
-        )
+    if not ladder:
+        # Legacy single-action path
+        threshold = float(rules.get("d01_threshold", 3))
+        if "D01" not in triggered and score >= threshold:
+            meta = actions.get("D01") or {}
+            return PolicyDecision(
+                action="D01",
+                action_name=str(meta.get("name", "expose_fake_host")),
+                risk_score=score,
+                level=level,
+                reason=f"score {score} >= D01 threshold {threshold}",
+            )
+    else:
+        for step in ladder:
+            action_id = str(step["id"])
+            min_score = float(step.get("min_score", 0))
+            if action_id in triggered:
+                continue
+            if score >= min_score:
+                meta = actions.get(action_id) or {}
+                return PolicyDecision(
+                    action=action_id,
+                    action_name=str(meta.get("name", action_id)),
+                    risk_score=score,
+                    level=level,
+                    reason=f"score {score} >= {action_id} threshold {min_score}",
+                )
 
     return PolicyDecision(
         action=None,

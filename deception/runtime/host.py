@@ -23,6 +23,8 @@ class VirtualHost:
     default_user: str
     filesystem: dict[str, dict[str, Any]]
     services: list[dict[str, Any]]
+    processes: list[dict[str, Any]] = field(default_factory=list)
+    network: dict[str, Any] = field(default_factory=dict)
     visible: bool = True
     fqdn: str = ""
 
@@ -50,9 +52,27 @@ class VirtualHost:
             default_user=str(raw.get("default_user", "root")),
             filesystem=normalized,
             services=list(raw.get("services") or []),
+            processes=list(raw.get("processes") or []),
+            network=dict(raw.get("network") or {}),
             visible=bool(raw.get("visible", True)),
             fqdn=str(raw.get("fqdn", "")),
         )
+
+    def write_file(self, path: str, content: str, *, canary: bool = False, artifact_id: str | None = None) -> None:
+        """Inject a virtual file (used by adaptive deception actions)."""
+        p = "/" if path == "/" else path.rstrip("/") or "/"
+        # Ensure parent directories exist in the virtual FS index
+        parts = [x for x in p.split("/") if x]
+        cur = ""
+        for part in parts[:-1]:
+            cur = f"{cur}/{part}"
+            if cur not in self.filesystem:
+                self.filesystem[cur] = {"type": "dir"}
+        meta: dict[str, Any] = {"type": "file", "content": content}
+        if canary:
+            meta["canary"] = True
+            meta["artifact_id"] = artifact_id or "canary"
+        self.filesystem[p] = meta
 
     def set_visible(self, visible: bool) -> None:
         self.visible = visible
@@ -79,6 +99,10 @@ class Session:
     user: str = ""
     cwd: str = "/"
     exposed_hosts: list[str] = field(default_factory=list)
+    verbose_telemetry: bool = False
+    canary_paths: set[str] = field(default_factory=set)
+    revealed_segments: list[dict[str, Any]] = field(default_factory=list)
+    deception_log: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.user:

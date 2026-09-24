@@ -38,16 +38,18 @@ Public HHP / CLI
   → policy → D01 expose fake host
 ```
 
-## Components (slice)
+## Components (slice + Phase 6)
 
 | Component | Inputs | Outputs |
 |-----------|--------|---------|
-| Virtual host YAML | hostname, FS, users, network | Loaded host state |
+| Virtual host YAML | hostname, FS, users, processes, network | Loaded host state |
 | Command engine | command + session + host | stdout/stderr + cwd |
 | Telemetry store | normalized events | JSONL on disk |
 | ATT&CK mapper | event + behavior | technique id + confidence |
 | Attack graph | mapped events | nodes/edges (JSON) |
-| Policy engine | risk score + graph | allowed deception action |
+| Actor profile | events + score | explainable behavior summary |
+| Policy engine | risk score + ladder | next deception action D01–D07 |
+| Staged artifacts | action id | injected files/services/segments |
 
 ## Security assumptions
 

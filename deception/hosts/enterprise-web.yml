@@ -68,4 +68,35 @@ services:
   - name: ssh
     port: 22
 
+processes:
+  - user: root
+    pid: 1
+    cmd: "/sbin/init"
+  - user: root
+    pid: 412
+    cmd: "/usr/sbin/sshd -D"
+  - user: www-data
+    pid: 880
+    cmd: "nginx: master process /usr/sbin/nginx"
+  - user: www-data
+    pid: 881
+    cmd: "nginx: worker process"
+  - user: admin
+    pid: 1501
+    cmd: "-bash"
+
+network:
+  interfaces:
+    - name: lo
+      addresses: ["127.0.0.1/8"]
+    - name: eth0
+      addresses: ["192.168.30.50/24"]
+  routes:
+    - destination: default
+      gateway: 192.168.30.254
+      dev: eth0
+    - destination: 192.168.30.0/24
+      gateway: null
+      dev: eth0
+
 visible: true
