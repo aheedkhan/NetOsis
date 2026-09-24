@@ -10,10 +10,46 @@ weights:
   Persistence: 8
   Canary_interaction: 6
 
-# Reveal a second fake host once discovery+collection score reaches threshold.
+# Progressive deception ladder (D08 sandbox deferred).
+# evaluate() fires the first action whose min_score is met and not yet triggered.
+ladder:
+  - id: D01
+    min_score: 3
+  - id: D02
+    min_score: 4
+  - id: D03
+    min_score: 5
+  - id: D04
+    min_score: 6
+  - id: D05
+    min_score: 7
+  - id: D06
+    min_score: 8
+  - id: D07
+    min_score: 9
+
+# Kept for backward-compatible docs/tests referencing d01_threshold.
 d01_threshold: 3
 
 actions:
   D01:
     name: expose_fake_host
     description: Reveal previously hidden virtual host (finance-db-01)
+  D02:
+    name: expose_fake_service
+    description: Inject believable redis service + process into virtual host
+  D03:
+    name: expose_fake_credential
+    description: Plant fake DB connection string artifact
+  D04:
+    name: expose_fake_document
+    description: Plant fake vendor contacts document
+  D05:
+    name: deploy_canary
+    description: Deploy canary document; access raises Canary_interaction risk
+  D06:
+    name: increase_telemetry
+    description: Enable verbose telemetry on the session
+  D07:
+    name: reveal_virtual_network_segment
+    description: Reveal FINANCE VLAN peers / route hint

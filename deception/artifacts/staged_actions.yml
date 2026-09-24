@@ -1,0 +1,63 @@
+# Staged deception payloads applied by policy actions D02–D07.
+# Real host YAML stays clean; these are injected into session host state.
+
+D02_expose_fake_service:
+  service:
+    name: redis
+    port: 6379
+  process:
+    user: redis
+    pid: 1402
+    cmd: "/usr/bin/redis-server *:6379"
+  note_path: /home/admin/.local/share/app/cache.conf
+  note_content: |
+    # app cache backend
+    CACHE_HOST=127.0.0.1
+    CACHE_PORT=6379
+
+D03_expose_fake_credential:
+  path: /home/admin/.config/ops/db.url
+  content: |
+    # staging connection (rotate quarterly)
+    postgres://report_ro:ChangeMe2024@finance-db-01.corp.local:5432/finance
+
+D04_expose_fake_document:
+  path: /home/admin/Documents/Q3_vendor_contacts.txt
+  content: |
+    Vendor contacts — internal use only
+    Acme Backup: backup-admin@acme.example
+    NetLink NOC: noc@netlink.example / jump host 192.168.20.40
+
+D05_deploy_canary:
+  # Realistic enterprise canary document
+  path: /home/admin/Documents/VPN_Migration_Steps_2024.txt
+  content: |
+    FW: VPN Migration to OPNsense
+    
+    As part of the Q4 rollout, the old AnyConnect gateways are being decommissioned.
+    Temporary credentials for the new portal (192.168.30.254):
+    Username: svc_vpn_mig
+    Password: TempMigration2024!
+    
+    Please test and report any connectivity issues to NOC.
+  artifact_id: vpn-migration-doc
+
+D06_increase_telemetry:
+  verbose: true
+
+D07_reveal_virtual_network_segment:
+  segment_name: FINANCE
+  vlan: 10
+  subnet: 192.168.10.0/24
+  gateway: 192.168.10.254
+  peers:
+    - hostname: finance-db-01
+      ip: 192.168.10.40
+    - hostname: fin-file-01
+      ip: 192.168.10.55
+  hosts_path: /home/admin/Documents/net_recon_hint.txt
+  hosts_content: |
+    Observed routes / peers (ops notes)
+    192.168.10.0/24 via 192.168.30.254
+    finance-db-01 192.168.10.40
+    fin-file-01 192.168.10.55

@@ -34,10 +34,9 @@ def _resolve(cwd: str, target: str) -> str:
 def _exists(host: VirtualHost, path: str) -> bool:
     if path in host.filesystem:
         return True
-    # Directory implied by children
-    prefix = path if path.endswith("/") else path + "/"
     if path == "/":
         return True
+    prefix = path if path.endswith("/") else path + "/"
     return any(k.startswith(prefix) or k == path for k in host.filesystem)
 
 
@@ -165,6 +164,58 @@ def execute(session: Session, line: str) -> CommandResult:
             )
         session.cwd = path
         return CommandResult(stdout="", command=line)
+
+    # Deterministic from host.processes / host.network YAML — do not shell out.
+    if cmd == "ps":
+        procs = host.processes or []
+        lines = ["USER       PID CMD"]
+        for proc in procs:
+            user = str(proc.get("user", "?"))
+            pid = str(proc.get("pid", "?"))
+            cmd_str = str(proc.get("cmd", ""))
+            lines.append(f"{user:<10} {pid:>4} {cmd_str}")
+        return CommandResult(stdout="\n".join(lines) + "\n", command=line)
+
+    if cmd == "ip":
+        if not args:
+            return CommandResult(
+                stdout="",
+                stderr="Usage: ip addr | ip route\n",
+                exit_code=1,
+                command=line,
+            )
+        sub = args[0]
+        net = host.network or {}
+        if sub in {"addr", "a", "address"}:
+            blocks: list[str] = []
+            for idx, iface in enumerate(net.get("interfaces") or [], start=1):
+                name = iface.get("name", f"eth{idx}")
+                addrs = iface.get("addresses") or []
+                blocks.append(f"{idx}: {name}: <UP>")
+                for addr in addrs:
+                    blocks.append(f"    inet {addr}")
+            if not blocks:
+                blocks = ["1: lo: <UP>", "    inet 127.0.0.1/8"]
+            return CommandResult(stdout="\n".join(blocks) + "\n", command=line)
+        if sub in {"route", "r"}:
+            rows: list[str] = []
+            for route in net.get("routes") or []:
+                dest = route.get("destination", "default")
+                gw = route.get("gateway")
+                dev = route.get("dev", "")
+                if gw:
+                    rows.append(f"{dest} via {gw} dev {dev}")
+                else:
+                    rows.append(f"{dest} dev {dev} proto kernel scope link")
+            if not rows:
+                rows = [f"default via {host.gateway} dev eth0"]
+            return CommandResult(stdout="\n".join(rows) + "\n", command=line)
+        return CommandResult(
+            stdout="",
+            stderr=f"ip: unknown subcommand '{sub}'\n",
+            exit_code=1,
+            command=line,
+        )
 
     return CommandResult(
         stdout="",

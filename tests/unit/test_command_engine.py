@@ -55,3 +55,18 @@ def test_unknown_command(session: Session) -> None:
     r = execute(session, "nmap 10.0.0.1")
     assert r.exit_code == 127
     assert "command not found" in r.stderr
+
+
+def test_ps(session: Session) -> None:
+    r = execute(session, "ps")
+    assert r.exit_code == 0
+    assert "nginx" in r.stdout
+    assert "PID" in r.stdout
+
+
+def test_ip_addr_and_route(session: Session) -> None:
+    r = execute(session, "ip addr")
+    assert r.exit_code == 0
+    assert "192.168.30.50/24" in r.stdout
+    r = execute(session, "ip route")
+    assert "192.168.30.254" in r.stdout

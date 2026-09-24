@@ -1,4 +1,4 @@
-# Behavior interpretation → MITRE ATT&CK technique mappings (slice).
+# Behavior interpretation → MITRE ATT&CK technique mappings.
 # Do not map blindly; confidence reflects how specific the observation is.
 
 mappings:
@@ -20,3 +20,15 @@ mappings:
     technique_name: Data from Local System
     confidence: 0.7
     risk_category: Collection
+  - behavior: process_discovery
+    commands: [ps]
+    technique: T1057
+    technique_name: Process Discovery
+    confidence: 0.8
+    risk_category: Discovery
+  - behavior: system_network_configuration_discovery
+    commands: [ip]
+    technique: T1016
+    technique_name: System Network Configuration Discovery
+    confidence: 0.85
+    risk_category: Discovery
