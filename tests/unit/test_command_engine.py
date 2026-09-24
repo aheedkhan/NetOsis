@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from deception.command_engine.engine import execute
+from deception.runtime.host import Session, VirtualHost
+
+ROOT = Path(__file__).resolve().parents[2]
+HOST = ROOT / "deception" / "hosts" / "enterprise-web.yml"
+
+
+@pytest.fixture
+def session() -> Session:
+    host = VirtualHost.load(HOST)
+    return Session(host=host, session_id="test-session")
+
+
+def test_pwd(session: Session) -> None:
+    r = execute(session, "pwd")
+    assert r.exit_code == 0
+    assert r.stdout.strip() == "/home/admin"
+
+
+def test_whoami(session: Session) -> None:
+    r = execute(session, "whoami")
+    assert r.stdout.strip() == "admin"
+
+
+def test_ls_home(session: Session) -> None:
+    r = execute(session, "ls")
+    assert r.exit_code == 0
+    assert "notes.txt" in r.stdout
+    assert ".bashrc" in r.stdout
+
+
+def test_cat_notes(session: Session) -> None:
+    r = execute(session, "cat notes.txt")
+    assert r.exit_code == 0
+    assert "Deploy checklist" in r.stdout
+    assert "finance-db-01" in r.stdout
+
+
+def test_cd_and_pwd(session: Session) -> None:
+    r = execute(session, "cd /var/www/html")
+    assert r.exit_code == 0
+    r = execute(session, "pwd")
+    assert r.stdout.strip() == "/var/www/html"
+    r = execute(session, "cat index.html")
+    assert "Corp Intranet" in r.stdout
+
+
+def test_unknown_command(session: Session) -> None:
+    r = execute(session, "nmap 10.0.0.1")
+    assert r.exit_code == 127
+    assert "command not found" in r.stderr

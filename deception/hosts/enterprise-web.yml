@@ -1,0 +1,71 @@
+# Enterprise public-facing web server (virtual / emulated).
+hostname: ent-web-01
+role: enterprise-web
+os: Ubuntu 22.04.4 LTS
+vlan: 30
+ip: 192.168.30.50
+gateway: 192.168.30.254
+fqdn: ent-web-01.corp.local
+
+users:
+  - name: www-data
+    uid: 33
+    home: /var/www
+  - name: admin
+    uid: 1000
+    home: /home/admin
+  - name: root
+    uid: 0
+    home: /root
+
+default_user: admin
+cwd: /home/admin
+
+filesystem:
+  /:
+    type: dir
+  /home:
+    type: dir
+  /home/admin:
+    type: dir
+  /home/admin/.bashrc:
+    type: file
+    content: |
+      # .bashrc
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  /home/admin/notes.txt:
+    type: file
+    content: |
+      Deploy checklist
+      - verify nginx on :80
+      - rotate staging certs
+      - ping finance-db-01 after change window
+  /var:
+    type: dir
+  /var/www:
+    type: dir
+  /var/www/html:
+    type: dir
+  /var/www/html/index.html:
+    type: file
+    content: |
+      <html><body><h1>Corp Intranet</h1></body></html>
+  /etc:
+    type: dir
+  /etc/hostname:
+    type: file
+    content: |
+      ent-web-01
+  /etc/hosts:
+    type: file
+    content: |
+      127.0.0.1 localhost
+      192.168.30.50 ent-web-01.corp.local ent-web-01
+
+services:
+  - name: nginx
+    port: 80
+  - name: ssh
+    port: 22
+
+visible: true
