@@ -1,0 +1,4 @@
+# Optional RAG + local embeddings (Qwen talks over HTTP separately).
+# pip install -r requirements-rag.txt
+-r requirements.txt
+sentence-transformers>=3.0.0

@@ -50,6 +50,8 @@ Public HHP / CLI
 | Actor profile | events + score | explainable behavior summary |
 | Policy engine | risk score + ladder | next deception action D01–D07 |
 | Staged artifacts | action id | injected files/services/segments |
+| RAG retrieval | session + command | compact virtual-host context |
+| LLM fallback | unsupported command + context | shell-like stdout/stderr (mock/API) |
 
 ## Security assumptions
 
@@ -60,7 +62,8 @@ Public HHP / CLI
 ## Failure modes
 
 - Missing host YAML → shell fails closed with a clear error.
-- Unknown command → deterministic “command not found”; no LLM fallback in slice.
+- Unknown / complex command → state-constrained LLM fallback (mock by default);
+  never invents hosts/IPs outside virtual state; policy still decides deception.
 - Policy below threshold → no deception action; state unchanged.
 
 ## Resource requirements
