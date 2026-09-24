@@ -4,6 +4,7 @@ import shlex
 from dataclasses import dataclass
 
 from deception.runtime.host import Session, VirtualHost
+from deception.llm.fallback import generate_response
 
 
 @dataclass
@@ -12,6 +13,7 @@ class CommandResult:
     stderr: str = ""
     exit_code: int = 0
     command: str = ""
+    llm_fallback: bool = False
 
 
 def _resolve(cwd: str, target: str) -> str:
@@ -217,9 +219,4 @@ def execute(session: Session, line: str) -> CommandResult:
             command=line,
         )
 
-    return CommandResult(
-        stdout="",
-        stderr=f"{cmd}: command not found\n",
-        exit_code=127,
-        command=line,
-    )
+    return generate_response(session, line)

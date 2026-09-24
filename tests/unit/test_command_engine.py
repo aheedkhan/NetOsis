@@ -51,10 +51,18 @@ def test_cd_and_pwd(session: Session) -> None:
     assert "Corp Intranet" in r.stdout
 
 
-def test_unknown_command(session: Session) -> None:
+def test_unknown_command_uses_llm_fallback(session: Session) -> None:
     r = execute(session, "nmap 10.0.0.1")
+    assert r.llm_fallback is True
     assert r.exit_code == 127
     assert "command not found" in r.stderr
+
+
+def test_llm_fallback_uname_uses_hostname(session: Session) -> None:
+    r = execute(session, "uname -a")
+    assert r.llm_fallback is True
+    assert r.exit_code == 0
+    assert session.host.hostname in r.stdout
 
 
 def test_ps(session: Session) -> None:

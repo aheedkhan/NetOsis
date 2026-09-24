@@ -26,7 +26,11 @@ def _cat_target_path(session: Session, command: str) -> str | None:
 
 
 class VerticalSlicePipeline:
-    """Wire shell → telemetry → ATT&CK → graph → policy → deception (no LLM)."""
+    """Wire shell → telemetry → ATT&CK → graph → policy → deception.
+
+    Native commands are deterministic. Unsupported commands may use a
+    state-constrained LLM fallback (mock by default); policy remains authoritative.
+    """
 
     def __init__(
         self,
@@ -91,6 +95,7 @@ class VerticalSlicePipeline:
             behavior=mapping.behavior if mapping else None,
             extra={
                 "risk_category": risk_category,
+                "llm_fallback": bool(getattr(result, "llm_fallback", False)),
                 **(
                     {"verbose": True, "cwd": self.session.cwd}
                     if self.session.verbose_telemetry

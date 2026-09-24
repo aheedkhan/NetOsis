@@ -73,7 +73,7 @@ def apply_action(
 
     if action_id == "D05":
         cfg = staged.get("D05_deploy_canary") or {}
-        path = str(cfg.get("path", "/home/admin/Documents/TODO_CANARY.txt"))
+        path = str(cfg.get("path", "/home/admin/Documents/VPN_Migration_Steps_2024.txt"))
         artifact_id = str(cfg.get("artifact_id", "canary-doc-01"))
         host.write_file(
             path,
