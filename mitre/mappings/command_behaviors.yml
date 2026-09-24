@@ -1,0 +1,22 @@
+# Behavior interpretation → MITRE ATT&CK technique mappings (slice).
+# Do not map blindly; confidence reflects how specific the observation is.
+
+mappings:
+  - behavior: system_owner_user_discovery
+    commands: [whoami]
+    technique: T1033
+    technique_name: System Owner/User Discovery
+    confidence: 0.85
+    risk_category: Discovery
+  - behavior: file_and_directory_discovery
+    commands: [ls, pwd]
+    technique: T1083
+    technique_name: File and Directory Discovery
+    confidence: 0.75
+    risk_category: Discovery
+  - behavior: data_from_local_system
+    commands: [cat]
+    technique: T1005
+    technique_name: Data from Local System
+    confidence: 0.7
+    risk_category: Collection

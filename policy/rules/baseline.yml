@@ -1,0 +1,19 @@
+# Experimental baseline risk weights (not ground truth).
+weights:
+  Discovery: 1
+  Credential_attack: 3
+  Successful_access: 4
+  Lateral_movement: 5
+  Payload_transfer: 5
+  Collection: 2
+  Execution: 8
+  Persistence: 8
+  Canary_interaction: 6
+
+# Reveal a second fake host once discovery+collection score reaches threshold.
+d01_threshold: 3
+
+actions:
+  D01:
+    name: expose_fake_host
+    description: Reveal previously hidden virtual host (finance-db-01)

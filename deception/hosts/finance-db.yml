@@ -1,0 +1,49 @@
+# Finance DB host — initially hidden until policy action D01.
+hostname: finance-db-01
+role: finance-db
+os: Ubuntu 22.04.4 LTS
+vlan: 10
+ip: 192.168.10.40
+gateway: 192.168.10.254
+fqdn: finance-db-01.corp.local
+
+users:
+  - name: postgres
+    uid: 108
+    home: /var/lib/postgresql
+  - name: dba
+    uid: 1000
+    home: /home/dba
+  - name: root
+    uid: 0
+    home: /root
+
+default_user: dba
+cwd: /home/dba
+
+filesystem:
+  /:
+    type: dir
+  /home:
+    type: dir
+  /home/dba:
+    type: dir
+  /home/dba/README.txt:
+    type: file
+    content: |
+      Finance DB host — restricted access.
+      Contact SOC before schema changes.
+  /etc:
+    type: dir
+  /etc/hostname:
+    type: file
+    content: |
+      finance-db-01
+
+services:
+  - name: postgresql
+    port: 5432
+  - name: ssh
+    port: 22
+
+visible: false

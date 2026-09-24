@@ -1,0 +1,63 @@
+# Authoritative FYP network model (locked).
+# Gateways use .254 on /24 networks. Do not revert to older /28 or .1 plans.
+
+management:
+  subnet: 172.30.226.0/24
+  proxmox_ip: 172.30.226.7/24
+  gateway: 172.30.226.254
+  bridge: vmbr0
+  notes: Outside FYP OPNsense VLAN architecture. Lab management only. Never expose to attackers.
+
+fyp:
+  bridge: vmbr1
+  trunk_vlans: [10, 20, 30, 40]
+  existing_vlan: 250
+  vlans:
+    - id: 10
+      name: FINANCE
+      subnet: 192.168.10.0/24
+      gateway: 192.168.10.254
+      purpose: Finance employee and deception segment
+      sdn_vnet: FIN
+    - id: 20
+      name: OPERATIONS
+      subnet: 192.168.20.0/24
+      gateway: 192.168.20.254
+      purpose: Operations employee and deception segment
+      sdn_vnet: OPS
+    - id: 30
+      name: ENTERPRISE
+      subnet: 192.168.30.0/24
+      gateway: 192.168.30.254
+      purpose: Enterprise / public-facing test services
+      sdn_vnet: ENT
+    - id: 40
+      name: SOC
+      subnet: 192.168.40.0/24
+      gateway: 192.168.40.254
+      purpose: SOC / telemetry / controller / RAG / LLM
+      sdn_vnet: null
+
+employee_vms:
+  - name: FIN-USER-01
+    vlan: 10
+    ip: 192.168.10.10
+  - name: FIN-USER-02
+    vlan: 10
+    ip: 192.168.10.11
+  - name: OPS-USER-01
+    vlan: 20
+    ip: 192.168.20.10
+  - name: OPS-USER-02
+    vlan: 20
+    ip: 192.168.20.11
+  - name: ENT-USER-01
+    vlan: 30
+    ip: 192.168.30.10
+  - name: ENT-USER-02
+    vlan: 30
+    ip: 192.168.30.11
+
+jumpbox:
+  ip: 172.30.227.1
+  access: OpenVPN then FreeRDP from Fedora workstation

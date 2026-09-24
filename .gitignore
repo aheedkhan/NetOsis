@@ -1,0 +1,43 @@
+# Secrets and local env
+.env
+*.ovpn
+openvpn-auth.txt
+**/credentials*
+**/*secret*
+**/*password*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg
+
+# Runtime / telemetry output
+data/
+*.jsonl
+!tests/**/*.jsonl
+
+# IDE / OS
+.cursor/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*~
+
+# Logs and PIDs
+*.log
+*.pid
+
+# Coverage
+.coverage
+htmlcov/
