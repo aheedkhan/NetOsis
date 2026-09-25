@@ -2,9 +2,9 @@
 hostname: ent-web-01
 role: enterprise-web
 os: Ubuntu 22.04.4 LTS
-vlan: 35
-ip: 192.168.35.50
-gateway: 192.168.35.254
+vlan: 30
+ip: 192.168.30.50
+gateway: 192.168.30.254
 fqdn: ent-web-01.corp.local
 
 users:
@@ -60,7 +60,7 @@ filesystem:
     type: file
     content: |
       127.0.0.1 localhost
-      192.168.35.50 ent-web-01.corp.local ent-web-01
+      192.168.30.50 ent-web-01.corp.local ent-web-01
 
 services:
   - name: nginx
@@ -90,12 +90,12 @@ network:
     - name: lo
       addresses: ["127.0.0.1/8"]
     - name: eth0
-      addresses: ["192.168.35.50/24"]
+      addresses: ["192.168.30.50/24"]
   routes:
     - destination: default
-      gateway: 192.168.35.254
+      gateway: 192.168.30.254
       dev: eth0
-    - destination: 192.168.35.0/24
+    - destination: 192.168.30.0/24
       gateway: null
       dev: eth0
 
