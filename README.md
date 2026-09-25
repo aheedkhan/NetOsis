@@ -46,7 +46,7 @@ pytest -q
 | `docs/` | Network, employee VMs, architecture notes |
 | `scripts/lab-access/` | VPN + FreeRDP wrappers (no secrets in Git) |
 
-See also: [docs/rag.md](docs/rag.md), [docs/llm-local.md](docs/llm-local.md) (Qwen2.5-3B on CPU).
+See also: [docs/rag.md](docs/rag.md), [docs/llm-local.md](docs/llm-local.md), [docs/ssh-honeypot.md](docs/ssh-honeypot.md).
 
 ## Lab access
 
