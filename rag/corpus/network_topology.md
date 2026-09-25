@@ -6,6 +6,7 @@ This document outlines the internal VLAN layout for NetOsis Enterprise.
 *   **VLAN 10 (Finance):** `192.168.10.0/24`. Strict isolation. Gateway: `192.168.10.254`. Hosts the primary PostgreSQL databases.
 *   **VLAN 20 (Operations):** `192.168.20.0/24`. Gateway: `192.168.20.254`. Contains internal operational tooling and jump boxes.
 *   **VLAN 30 (Enterprise/Web):** `192.168.30.0/24`. Gateway: `192.168.30.254`. General employee services and intranets.
+*   **VLAN 35 (Enterprise/Deception):** `192.168.35.0/24`. Gateway: `192.168.35.254`. Enterprise server infrastructure (Honeypot Decoys).
 *   **VLAN 40 (SOC):** `192.168.40.0/24`. Security operations and monitoring.
 *   **Management:** `172.30.226.0/24`. **RESTRICTED.** Do not expose to general subnets.
 
