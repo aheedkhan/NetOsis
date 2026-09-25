@@ -33,3 +33,4 @@
 
 - 2026-09-25 | Antigravity | corpus docs + first ssh_honeypot.py
 - 2026-09-25 | Cursor | harden SSH honeypot, docs, defaults to 3B, paramiko req
+- 2026-09-25 | Antigravity | Audited Phase 3. SSH Honeypot fixed. Delegated Phase 4/5 (Proxmox Lab Deployment & Remote Access) to Cursor.
