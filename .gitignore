@@ -25,6 +25,8 @@ venv/
 data/
 *.jsonl
 !tests/**/*.jsonl
+ssh_host_rsa_key
+*_rsa_key
 
 # IDE / OS
 .cursor/
