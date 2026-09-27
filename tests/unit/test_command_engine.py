@@ -75,6 +75,6 @@ def test_ps(session: Session) -> None:
 def test_ip_addr_and_route(session: Session) -> None:
     r = execute(session, "ip addr")
     assert r.exit_code == 0
-    assert "192.168.30.50/24" in r.stdout
+    assert "192.168.30.10/24" in r.stdout
     r = execute(session, "ip route")
     assert "192.168.30.254" in r.stdout

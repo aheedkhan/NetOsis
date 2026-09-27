@@ -2,35 +2,23 @@
 
 ## Purpose
 
-Six real employee workstations provide believable enterprise presence.
-They sit on FYP VLANs via Proxmox SDN VNets — not on management `vmbr0`.
+Real employee workstations for **Finance** and **Operations** only.
+Enterprise (VLAN 30) has **no** employee desktops — only servers / enterprise jumpbox / HHP.
 
-## Inventory
+## Inventory (IPs in real range `.31+`)
 
 | Name | VLAN | IP | SDN VNet |
 |------|------|-----|----------|
-| FIN-USER-01 | 10 FINANCE | `192.168.10.10` | FIN |
-| FIN-USER-02 | 10 FINANCE | `192.168.10.11` | FIN |
-| OPS-USER-01 | 20 OPERATIONS | `192.168.20.10` | OPS |
-| OPS-USER-02 | 20 OPERATIONS | `192.168.20.11` | OPS |
-| ENT-USER-01 | 30 ENTERPRISE | `192.168.30.10` | ENT |
-| ENT-USER-02 | 30 ENTERPRISE | `192.168.30.11` | ENT |
+| FIN-USER-01 | 10 | `192.168.10.31` | FIN |
+| FIN-USER-02 | 10 | `192.168.10.32` | FIN |
+| OPS-USER-01 | 20 | `192.168.20.31` | OPS |
+| OPS-USER-02 | 20 | `192.168.20.32` | OPS |
 
 ## Template workflow
 
-VM 102 has been used as the employee base/template (observed: Ubuntu 26.04.1 LTS).
-Do not silently change the OS version.
+Linked clones from a golden Ubuntu template (VM 102 historically).
+Do not bake per-VM IPs into the template. Do **not** clone NetOsis HHP LXCs from the employee template.
 
-```text
-Ubuntu base
-  → common employee configuration
-  → Cloud-Init / clone customization
-  → Proxmox template
-  → FIN/OPS/ENT USER clones
-```
+## Status
 
-Do not bake employee-specific IP addresses into the template.
-
-## Status (Phase 0)
-
-Documentation only. No automatic Proxmox clone or network attachment in this phase.
+Documentation aligned with `config/network/vlans.yml`. Apply Proxmox clones only with your approval.

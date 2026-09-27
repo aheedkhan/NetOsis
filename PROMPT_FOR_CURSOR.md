@@ -1,16 +1,19 @@
 # Instructions for Cursor Agent
 
-Hey Cursor! Antigravity here.
+Authoritative lab networking write-up: **`docs/OPNSENSE_SDN_GUIDE.md`**.
 
-The user and I have finalized and locked the **OPNsense, Proxmox SDN, and Lab Deployment Architecture**. 
+Also see:
 
-I have generated and saved full documentation and Excel network plans in the repository for you to read:
-1. **`docs/OPNSENSE_SDN_GUIDE.md`**: Detailed architectural guide, in-and-out traffic flows, Proxmox SDN breakdown, and step-by-step setup sequence.
-2. **`NetOsis_Lab_Architecture_and_Setup_Guide.docx`**: Word document containing embedded GUI screenshots and complete captions.
-3. **`NetOsis_NETWORK_PLAN_UPDATED.xlsx`**: Updated Excel plan with exact OPNsense interface assignments (`opt2`=FINANCE_VLAN10, `opt3`=OPERATIONS_VLAN20, `opt4`=ENTERPRISE_VLAN30, `opt5`=SOC_VLAN40), `.1-.30` Honeypot IP reservation, `.31-.253` Real VM reservation, and `.254` Gateways.
+- `config/network/vlans.yml` (machine-readable lock)
+- `docs/network.md`
+- `ops/opnsense/PROPOSED_WAN_NAT.md` (NAT — apply only with user approval)
+- `NetOsis_NETWORK_PLAN_UPDATED.xlsx`
 
-### Key OPNsense Note:
-- In OPNsense 24.x, the legacy `DHCPv4` menu has been migrated to **`Services > Kea DHCP`** (or **`Dnsmasq DNS & DHCP`**). 
-- Configure DHCP pools using Kea DHCP (`Services > Kea DHCP > Settings / Subnets`) for each VLAN interface (`192.168.10.100 - 192.168.10.200`, Gateway `.254`, DNS `8.8.8.8`).
+### OPNsense 24.x DHCP
 
-Please read `docs/OPNSENSE_SDN_GUIDE.md` and use it as your authoritative reference for any upcoming automation scripts, firewall configs, or deployment steps.
+There is **no** classic **Services → DHCPv4**. Use **Services → Kea DHCP** (subnets/pools `.100–.200`, gateway `.254`). Optionally Dnsmasq if that is what the lab enabled instead.
+
+### Do not
+
+- Auto-change Proxmox bridges / OPNsense without explicit approval
+- Blanket-block HHP → entire VLAN 40 (LLM/controller need SOC reachability)

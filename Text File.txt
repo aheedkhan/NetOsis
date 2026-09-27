@@ -1,2 +1,39 @@
  agent --resume=de213f06-5cd3-4d04-b182-4de447a9bddf
 agy --conversation=ffa93a05-ef22-4b49-a456-e04504320639
+
+
+
+
+
+mania  NetOsis  ➜ ( main)  ♥ 17:27  ssh admin@192.168.1.9 -p 2222
+The authenticity of host '[192.168.1.9]:2222 ([192.168.1.9]:2222)' can't be established.
+RSA key fingerprint is: SHA256:YvEUmszGe7WS2pwi4s8Gp/zQXl55EG/nj7oorjhBYpE
+This host key is known by the following other names/addresses:
+    ~/.ssh/known_hosts:7: [192.168.1.5]:2222
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '[192.168.1.9]:2222' (RSA) to the list of known hosts.
+admin@192.168.1.9's password:
+Welcome to Ubuntu 22.04.4 LTS
+admin@ent-web-01:/home/admin$ ip a
+1: lo: <UP>
+    inet 127.0.0.1/8
+2: eth0: <UP>
+    inet 192.168.30.10/24
+admin@ent-web-01:/home/admin$ asdasd
+bash: asdasd: command not found
+admin@ent-web-01:/home/admin$ uname -a
+Linux ent-web-01 5.10.0-10-amd64 #1 SMP Debian 5.10.110-1 (2022-09-16) x86_64 GNU/Linux
+admin@ent-web-01:/home/admin$ ls
+.bashrc
+notes.txt
+admin@ent-web-01:/home/admin$ cat notes.txt
+Deploy checklist
+- verify nginx on :80
+- rotate staging certs
+- ping finance-db-01 after change window
+admin@ent-web-01:/home/admin$  ifconfig
+bash: ifconfig: command not found
+admin@ent-web-01:/home/admin$ man corp_backup.sh
+bash: man corp_backup.sh: command not found
+admin@ent-web-01:/home/admin$ Connection to 192.168.1.9 closed by remote host.
+Connection to 192.168.1.9 closed.

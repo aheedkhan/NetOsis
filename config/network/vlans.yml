@@ -1,63 +1,161 @@
 # Authoritative FYP network model (locked).
 # Gateways use .254 on /24 networks. Do not revert to older /28 or .1 plans.
+#
+# Per-VLAN IP blocks (logical admin scheme; attackers see normal hosts):
+#   .1  – .30  = honeypots (HHP)
+#   .31 – .253 = real systems (employees / servers / enterprise jumpbox)
+#   .254       = OPNsense gateway
 
 management:
   subnet: 172.30.226.0/24
   proxmox_ip: 172.30.226.7/24
   gateway: 172.30.226.254
   bridge: vmbr0
-  notes: Outside FYP OPNsense VLAN architecture. Lab management only. Never expose to attackers.
+  notes: Fake Internet + management fabric. Hosts Proxmox, OPNsense WAN, Kali. Never real public exposure.
+
+fake_internet:
+  bridge: vmbr0
+  kali_example_ip: 172.30.226.50
+  opnsense_wan_example_ip: 172.30.226.100
+  nat:
+    - wan_port: 80
+      to: 192.168.30.40:80
+      role: real_enterprise_web
+    - wan_port: 22
+      to: 192.168.30.10:2222
+      role: enterprise_ssh_hhp
+  notes: See ops/opnsense/PROPOSED_WAN_NAT.md — apply only with user approval.
+
+management_jumpbox:
+  ip: 172.30.227.1
+  access: OpenVPN then FreeRDP — Proxmox/OPNsense admin only
+  notes: NOT the Enterprise jumpbox. Invisible to FYP VLANs.
 
 fyp:
   bridge: vmbr1
   trunk_vlans: [10, 20, 30, 40]
   existing_vlan: 250
+  sdn:
+    zone: fypzone
+    zone_type: vlan
+    ipam: pve
+    node: vhos
+    vnets:
+      - name: FIN
+        vlan_tag: 10
+      - name: OPS
+        vlan_tag: 20
+      - name: ENT
+        vlan_tag: 30
+      - name: SOC
+        vlan_tag: 40
+  ip_policy:
+    honeypot_range: ".1-.30"
+    real_static_range: ".31-.99"
+    dhcp_pool: ".100-.200"
+    real_range: ".31-.253"
+    gateway: ".254"
+  dhcp:
+    engine: kea   # OPNsense 24.x — not legacy Services > DHCPv4
+    pools:
+      - vlan: 10
+        subnet: 192.168.10.0/24
+        range: [192.168.10.100, 192.168.10.200]
+        gateway: 192.168.10.254
+      - vlan: 20
+        subnet: 192.168.20.0/24
+        range: [192.168.20.100, 192.168.20.200]
+        gateway: 192.168.20.254
+      - vlan: 30
+        subnet: 192.168.30.0/24
+        range: [192.168.30.100, 192.168.30.200]
+        gateway: 192.168.30.254
+      - vlan: 40
+        subnet: 192.168.40.0/24
+        range: [192.168.40.100, 192.168.40.200]
+        gateway: 192.168.40.254
+  hh_egress_policy:
+    block_to_real_hosts: true   # .1-.30 must not initiate to .31-.253
+    allow_to_soc: true          # required for Ollama / controller / telemetry
   vlans:
     - id: 10
       name: FINANCE
       subnet: 192.168.10.0/24
       gateway: 192.168.10.254
-      purpose: Finance employee and deception segment
+      purpose: Finance employees + departmental HHP (same VLAN, Proxmox FW microseg on HHP)
       sdn_vnet: FIN
+      hosts_model: employees_and_hhp
     - id: 20
       name: OPERATIONS
       subnet: 192.168.20.0/24
       gateway: 192.168.20.254
-      purpose: Operations employee and deception segment
+      purpose: Operations employees + departmental HHP
       sdn_vnet: OPS
+      hosts_model: employees_and_hhp
     - id: 30
       name: ENTERPRISE
       subnet: 192.168.30.0/24
       gateway: 192.168.30.254
-      purpose: Enterprise / public-facing test services
+      purpose: Server zone only — enterprise jumpbox, real servers, enterprise HHP (no employees)
       sdn_vnet: ENT
+      hosts_model: servers_jumpbox_hhp
     - id: 40
       name: SOC
       subnet: 192.168.40.0/24
       gateway: 192.168.40.254
-      purpose: SOC / telemetry / controller / RAG / LLM
+      purpose: NetOsis controller, Ollama/LLM, Wazuh (monitor employees + decoys)
       sdn_vnet: null
+      hosts_model: controller_monitoring
 
+# Real employee workstations (Finance / Ops only — no ENT users)
 employee_vms:
   - name: FIN-USER-01
     vlan: 10
-    ip: 192.168.10.10
+    ip: 192.168.10.31
   - name: FIN-USER-02
     vlan: 10
-    ip: 192.168.10.11
+    ip: 192.168.10.32
   - name: OPS-USER-01
     vlan: 20
-    ip: 192.168.20.10
+    ip: 192.168.20.31
   - name: OPS-USER-02
     vlan: 20
-    ip: 192.168.20.11
-  - name: ENT-USER-01
+    ip: 192.168.20.32
+
+# Enterprise real infrastructure (VLAN 30, IPs in .31+)
+enterprise_reals:
+  - name: ENT-JUMP-01
+    role: enterprise_jumpbox
+    vlan: 30
+    ip: 192.168.30.31
+    notes: Internal work jump for managing enterprise servers — not management 172.30.227.1
+  - name: ENT-WEB-REAL-01
+    role: real_web
+    vlan: 30
+    ip: 192.168.30.40
+
+# Honeypot / decoy placements (IPs in .1-.30)
+honeypots:
+  - name: ent-web-01
+    role: enterprise-web-hhp
     vlan: 30
     ip: 192.168.30.10
-  - name: ENT-USER-02
-    vlan: 30
-    ip: 192.168.30.11
+    vmid_hint: 390
+    yaml: deception/hosts/enterprise-web.yml
+  - name: finance-db-01
+    role: finance-db-hhp
+    vlan: 10
+    ip: 192.168.10.10
+    vmid_hint: 190
+    yaml: deception/hosts/finance-db.yml
 
-jumpbox:
-  ip: 172.30.227.1
-  access: OpenVPN then FreeRDP from Fedora workstation
+soc_services:
+  - name: netosis-controller
+    vlan: 40
+    ip: 192.168.40.31
+    vmid_hint: 490
+    notes: SSH honeypot controller optional co-locate; Ollama + policy
+  - name: wazuh
+    vlan: 40
+    ip: 192.168.40.40
+    notes: Monitor real employees (+ decoy telemetry if forwarded)
