@@ -1,18 +1,16 @@
-# Phase 4/5: Lab Deployment & Remote Access
+# Instructions for Cursor Agent
 
-Hey Cursor! Antigravity here. I've audited the Phase 3 LLM integration and the SSH server. Everything is passing flawlessly (20/20 tests), and I've committed the latest fixes to `main`. 
+Hey Cursor! Antigravity here.
 
-The user is heading to work, but they explicitly gave us the green light to move forward with **Remote Access and Lab VLAN Deployment**. They want to be able to access the honeypot remotely from their laptop while at work.
+The user and I have finalized and locked the **OPNsense, Proxmox SDN, and Lab Deployment Architecture**. 
 
-### Your Next Tasks:
-1. **Automate Remote Lab Deployment:**
-   - Write a deployment script (e.g., `scripts/deploy_to_lab.sh` or an Ansible playbook) that takes this entire NetOsis directory and pushes it to the remote Proxmox lab.
-   - Utilize the VPN and Jumpbox variables defined in `.env` (like `JUMPBOX_RDP_TARGET=172.30.227.1`) to establish the SSH/SCP tunnels required to push the code.
-2. **Systemd Service for the SSH Honeypot:**
-   - Create a `systemd` service file (e.g., `netosis-ssh.service`) that automatically runs `scripts/ssh_honeypot.py --port 2222` on the remote server on boot.
-   - Ensure the service correctly loads the `.env` variables and activates the Python virtual environment.
-3. **VLAN Integration (Proxmox/OPNsense):**
-   - The honeypot is simulating `192.168.30.50` (VLAN 30 - Enterprise). Write the necessary Proxmox network interface configs or instructions to bridge the remote honeypot VM onto `vmbr1` with VLAN tag `30`.
-   - Update `HANDOFF.md` with instructions on how the user can SSH into the honeypot from their laptop at work (e.g., connecting to the lab VPN and SSHing directly into the VLAN 30 IP).
+I have generated and saved full documentation and Excel network plans in the repository for you to read:
+1. **`docs/OPNSENSE_SDN_GUIDE.md`**: Detailed architectural guide, in-and-out traffic flows, Proxmox SDN breakdown, and step-by-step setup sequence.
+2. **`NetOsis_Lab_Architecture_and_Setup_Guide.docx`**: Word document containing embedded GUI screenshots and complete captions.
+3. **`NetOsis_NETWORK_PLAN_UPDATED.xlsx`**: Updated Excel plan with exact OPNsense interface assignments (`opt2`=FINANCE_VLAN10, `opt3`=OPERATIONS_VLAN20, `opt4`=ENTERPRISE_VLAN30, `opt5`=SOC_VLAN40), `.1-.30` Honeypot IP reservation, `.31-.253` Real VM reservation, and `.254` Gateways.
 
-You are cleared for full lab cutover. Keep the LLM running on CPU (`NETOSIS_LLM_MODE=qwen`). Good luck!
+### Key OPNsense Note:
+- In OPNsense 24.x, the legacy `DHCPv4` menu has been migrated to **`Services > Kea DHCP`** (or **`Dnsmasq DNS & DHCP`**). 
+- Configure DHCP pools using Kea DHCP (`Services > Kea DHCP > Settings / Subnets`) for each VLAN interface (`192.168.10.100 - 192.168.10.200`, Gateway `.254`, DNS `8.8.8.8`).
+
+Please read `docs/OPNSENSE_SDN_GUIDE.md` and use it as your authoritative reference for any upcoming automation scripts, firewall configs, or deployment steps.
