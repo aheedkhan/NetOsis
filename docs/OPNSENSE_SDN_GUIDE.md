@@ -1,47 +1,105 @@
 # OPNsense, Proxmox SDN, and Lab Architecture Master Guide
 
-## 1. Proxmox SDN Architecture & VLAN Mapping
-* **Zone**: `fypzone` (Type: `vlan`, IPAM: `pve`, Node: `vhos`).
-* **Trunk Bridge**: `vmbr1` (VLAN-aware: `Yes`).
-* **Virtual Networks (VNets)**:
-  * `FIN` -> VLAN Tag 10 -> Subnet `192.168.10.0/24`, Gateway `192.168.10.254`
-  * `OPS` -> VLAN Tag 20 -> Subnet `192.168.20.0/24`, Gateway `192.168.20.254`
-  * `ENT` -> VLAN Tag 30 -> Subnet `192.168.30.0/24`, Gateway `192.168.30.254`
-  * `SOC` -> VLAN Tag 40 -> Subnet `192.168.40.0/24`, Gateway `192.168.40.254`
-* **Management & WAN Bridge**: `vmbr0` (Non-VLAN-aware, `172.30.226.0/24`). Contains Proxmox host (`172.30.226.7`), Jumpbox (`172.30.227.1`), Kali Linux Attacker VM (`172.30.226.50`), and OPNsense WAN interface (`vtnet1`).
+Synced with screenshots / Excel plan. Machine truth: [`config/network/vlans.yml`](../config/network/vlans.yml).
 
-## 2. In-and-Out Traffic Flow
-1. **Outbound Internet (VM 102 / Employees -> Internet)**:
-   * VM 102 (`192.168.10.102` on VNet `FIN`) sends packet to `8.8.8.8` via gateway `192.168.10.254`.
-   * Frame egresses `vmbr1` tagged with VLAN 10.
-   * OPNsense receives packet on parent `vtnet0` subinterface `vlan0.10` (`FINANCE_VLAN10`).
-   * OPNsense checks Firewall Rules for `FINANCE_VLAN10`. If allowed, packet is routed to WAN (`vtnet1`).
-   * Outbound NAT translates source IP `192.168.10.102` -> WAN IP `172.30.226.X`.
-   * Packet exits `vtnet1` onto `vmbr0` -> Upstream Gateway `172.30.226.254` -> Internet.
+## 1. Proxmox SDN architecture
 
-2. **Inbound Recon & Attack (Kali -> Honeypot)**:
-   * Kali on `vmbr0` (`172.30.226.50`) targets OPNsense WAN IP (`172.30.226.X`) on Port 2222 or 80.
-   * OPNsense WAN matches NAT Port Forwarding rule -> rewrites destination IP to Honeypot IP `192.168.30.10` (VLAN 30).
-   * OPNsense WAN firewall rule passes packet out subinterface `vlan0.30` (`ENTERPRISE_VLAN30`) over `vmbr1` (Tag 30) -> Honeypot container/VM (`390`).
+| Layer | Name | Role |
+|-------|------|------|
+| SDN Zone | `fypzone` (type **vlan**, IPAM **pve**, node **vhos**) | 802.1Q over `vmbr1` |
+| VNets | `FIN` / `OPS` / `ENT` / `SOC` | Tags **10 / 20 / 30 / 40** |
+| Bridge | `vmbr1` | VLAN-aware trunk to OPNsense LAN (`vtnet0`) |
+| Bridge | `vmbr0` | Non-VLAN-aware fake Internet / mgmt `172.30.226.0/24` |
 
-3. **Inter-VLAN & Deception Isolation**:
-   * **IP Allocation Rule**:
-     * `.1` to `.30`: Honeypots / Deception Decoys (e.g. `192.168.30.10` ENT Web Honeypot).
-     * `.31` to `.253`: Real Employee VMs / Real Servers (e.g. `192.168.10.31` FIN-USER-01).
-     * `.254`: OPNsense Gateway.
-   * **Segmentation**: OPNsense rules + Proxmox Hypervisor Firewall (`firewall=1`) drop all outbound connections initiated by Honeypots (`.1-.30`) toward Real Employee IPs (`.31-.253`) or SOC VLAN 40.
+**vmbr0 hosts (examples):** Proxmox `172.30.226.7`, Kali `172.30.226.50`, OPNsense WAN `vtnet1` (e.g. `172.30.226.100`).  
+**Management jumpbox** `172.30.227.1` is admin VPN/RDP (not Enterprise jumpbox; keep off attacker paths).
 
-## 3. Master Sequence of Execution
-1. **Step 1: Proxmox SDN Verification**: Confirm `vmbr1` is VLAN-aware and `fypzone` has VNets `FIN`, `OPS`, `ENT`, `SOC` (Tags 10, 20, 30, 40).
-2. **Step 2: OPNsense Interface Assignments**: Assign `vtnet1` to WAN, `vtnet0` to LAN, and assign subinterfaces `vlan0.10` (FINANCE_VLAN10), `vlan0.20` (OPERATIONS_VLAN20), `vlan0.30` (ENTERPRISE_VLAN30), `vlan0.40` (SOC_VLAN40). Set IPv4 address `.254/24` on each.
-3. **Step 3: DHCP & DNS Configuration**:
-   * OPNsense 24.x uses **Kea DHCP** (or **Dnsmasq**) under `Services > Kea DHCP`.
-   * Add subnet definitions (e.g. `192.168.10.0/24`) and pools (`192.168.10.100` - `192.168.10.200`), Gateway `192.168.x.254`, DNS `8.8.8.8` / `192.168.x.254`.
-4. **Step 4: OPNsense Outbound NAT & Firewall Rules**:
-   * Enable Hybrid/Automatic Outbound NAT for `192.168.0.0/16` on WAN interface.
-   * Create Pass rules on each VLAN interface for Internet access.
-   * Create Block rules restricting Honeypot initiated traffic to real subnets.
-5. **Step 5: VM 102 (Ubuntu Base) Configuration**:
-   * Attach VM 102 NIC to VNet `FIN` (Tag 10).
-   * Configure Netplan for DHCP or static IP `192.168.10.102/24`, gateway `192.168.10.254`, DNS `8.8.8.8`.
-   * Verify with: `ping 192.168.10.254`, `ping 8.8.8.8`, `ping google.com`.
+Attaching a VM NIC to VNet **FIN** auto-tags VLAN **10** (same idea for OPS/ENT/SOC).
+
+## 2. OPNsense interfaces (from lab evidence)
+
+| Assignment | Interface | Addressing |
+|------------|-----------|------------|
+| WAN | `vtnet1` on `vmbr0` | `172.30.226.x/24` |
+| LAN parent | `vtnet0` on `vmbr1` | trunk parent |
+| opt2 FINANCE_VLAN10 | `vlan0.10` tag 10 | `192.168.10.254/24` |
+| opt3 OPERATIONS_VLAN20 | `vlan0.20` tag 20 | `192.168.20.254/24` |
+| opt4 ENTERPRISE_VLAN30 | `vlan0.30` tag 30 | `192.168.30.254/24` |
+| opt5 SOC_VLAN40 | `vlan0.40` tag 40 | `192.168.40.254/24` |
+
+## 3. Traffic flows
+
+### A) Employee → Internet (e.g. VM 102 on FIN)
+
+1. Host uses GW `.254` on its VLAN  
+2. Tagged on `vmbr1` → OPNsense VLAN subiface  
+3. Firewall allow → Outbound NAT on WAN → `vmbr0` → upstream `172.30.226.254`
+
+### B) Kali → “public” WAN → HHP (external story)
+
+1. Kali on `vmbr0` scans OPNsense WAN IP  
+2. NAT: WAN `:80` → real web `192.168.30.40`; WAN `:22` → HHP `192.168.30.10:2222`  
+3. Egress on `vlan0.30` / tag 30 → CT/VM **390**
+
+### C) IP blocks + isolation
+
+| Range | Use |
+|-------|-----|
+| `.1`–`.30` | Honeypots |
+| `.31`–`.253` | Real systems |
+| `.254` | Gateway |
+| DHCP pools | `.100`–`.200` (leaves static `.31`–`.99`) |
+
+**HHP outbound policy (correct for NetOsis):**
+
+- **Block** HHP (`.1–.30`) → real ranges (`.31–.253`) on same/other user VLANs  
+- **Allow** HHP → **SOC `192.168.40.0/24`** only as needed (Ollama / controller / telemetry)  
+- Do **not** blanket-block all of VLAN 40 or the LLM path breaks  
+
+Use OPNsense rules **and** Proxmox FW (`firewall=1`) on HHP LXCs.
+
+## 4. Why you don’t see “DHCPv4” (OPNsense 24.x)
+
+Legacy **Services → DHCPv4** (ISC) was removed/replaced.
+
+Use one of:
+
+| Menu | When |
+|------|------|
+| **Services → Kea DHCP** | Default modern DHCP (recommended) |
+| **Services → Dnsmasq DNS & DHCP** | If you chose Dnsmasq for DHCP instead |
+
+Also use **Services → Unbound DNS** for resolver (separate from DHCP).
+
+### Kea DHCP — configure each VLAN
+
+1. **Services → Kea DHCP → Settings** — enable Kea  
+2. **Subnets → +** for each VLAN:
+
+| Subnet | Pool | Routers | DNS |
+|--------|------|---------|-----|
+| `192.168.10.0/24` | `192.168.10.100`–`200` | `192.168.10.254` | `8.8.8.8` or `.254` |
+| `192.168.20.0/24` | `192.168.20.100`–`200` | `192.168.20.254` | same pattern |
+| `192.168.30.0/24` | `192.168.30.100`–`200` | `192.168.30.254` | same |
+| `192.168.40.0/24` | `192.168.40.100`–`200` | `192.168.40.254` | same |
+
+3. Bind/enable the subnet on the matching interface (FINANCE_VLAN10, etc.)  
+4. **Apply**  
+5. On VM 102 (VNet FIN): DHCP or static; test `ping 192.168.10.254`, `ping 8.8.8.8`, `ping google.com`
+
+If Kea UI shows subnets but leases never appear: confirm the VLAN interface is **up**, has `.254/24`, and firewall allows UDP **67/68** to the firewall on that VLAN.
+
+## 5. Execution sequence
+
+1. Verify SDN (`fypzone`, VNets, `vmbr1` VLAN-aware)  
+2. OPNsense VLAN IPs `.254`  
+3. **Kea DHCP** pools + Unbound/DNS  
+4. Outbound NAT + firewall (Internet pass; HHP block to reals; HHP allow SOC)  
+5. VM 102 template connectivity  
+6. HHP LXC 390 + Proxmox FW + optional WAN NAT ([`ops/opnsense/PROPOSED_WAN_NAT.md`](../ops/opnsense/PROPOSED_WAN_NAT.md))
+
+## 6. Artifacts
+
+- Excel: `NetOsis_NETWORK_PLAN_UPDATED.xlsx`  
+- Docx (screenshots): `NetOsis_Lab_Architecture_and_Setup_Guide.docx` (if present in workspace)  
+- This guide: `docs/OPNSENSE_SDN_GUIDE.md`
