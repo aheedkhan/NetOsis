@@ -1,0 +1,24 @@
+[Unit]
+Description=NetOsis SSH honeypot (fake shell + RAG/Qwen fallback)
+Documentation=file:///opt/netosis/docs/ssh-honeypot.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netosis
+Group=netosis
+WorkingDirectory=/opt/netosis
+EnvironmentFile=-/opt/netosis/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/netosis/.venv/bin/python -u /opt/netosis/scripts/ssh_honeypot.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/netosis/data
+
+[Install]
+WantedBy=multi-user.target

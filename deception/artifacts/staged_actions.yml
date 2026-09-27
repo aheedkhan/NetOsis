@@ -52,12 +52,12 @@ D07_reveal_virtual_network_segment:
   gateway: 192.168.10.254
   peers:
     - hostname: finance-db-01
-      ip: 192.168.10.40
+      ip: 192.168.10.10
     - hostname: fin-file-01
-      ip: 192.168.10.55
+      ip: 192.168.10.12
   hosts_path: /home/admin/Documents/net_recon_hint.txt
   hosts_content: |
     Observed routes / peers (ops notes)
     192.168.10.0/24 via 192.168.30.254
-    finance-db-01 192.168.10.40
-    fin-file-01 192.168.10.55
+    finance-db-01 192.168.10.10
+    fin-file-01 192.168.10.12

@@ -3,7 +3,7 @@ hostname: finance-db-01
 role: finance-db
 os: Ubuntu 22.04.4 LTS
 vlan: 10
-ip: 192.168.10.40
+ip: 192.168.10.10
 gateway: 192.168.10.254
 fqdn: finance-db-01.corp.local
 
