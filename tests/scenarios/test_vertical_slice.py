@@ -23,11 +23,14 @@ def _pipeline(tmp_path: Path) -> VerticalSlicePipeline:
         session_id=str(uuid.uuid4()),
         actor_id="test-actor",
     )
+    from deception.runtime.profile_store import ProfileStore
+
     return VerticalSlicePipeline(
         session=session,
         store=store,
         graph=graph,
         second_host_path=ROOT / "deception/hosts/finance-db.yml",
+        profile_store=ProfileStore(tmp_path / "profiles"),
     )
 
 

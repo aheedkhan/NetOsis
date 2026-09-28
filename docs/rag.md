@@ -1,50 +1,77 @@
-# RAG + Qwen 7B for NetOsis
+# RAG + LLM pipeline (and vs NVIDIA Blueprint)
 
-## Goal
+## What is special about NetOsis?
 
-Local RAG for unknown shell commands:
-1. Embed / index virtual filesystem + host state
-2. Retrieve top-k evidence (`all-MiniLM-L6-v2` when installed)
-3. Generate with **Qwen 2.5 7B Instruct** (Ollama / NIM / vLLM)
-4. LLM stays a **fallback only** — never the controller
+| Idea | Why it matters (viva) |
+|------|------------------------|
+| **LLM is not the controller** | Deterministic YAML answers `pwd`/`ls`/`ip`; policy (D01–D07) decides deception — explainable, not “AI magic” |
+| **RAG grounds hallucinations** | Unknown cmds get evidence from virtual FS + `rag/corpus/` before Qwen speaks |
+| **Same spine as enterprise RAG** | Ingest → retrieve → generate — like NVIDIA’s blueprint, but lab-scale |
+| **Deception + ATT&CK + graph** | Not just a chatbot shell — telemetry, techniques, adaptive bait |
+| **Demo marks** | `[llm]` prefix shows what Qwen produced vs deterministic output |
 
-## Modules
+## Is our pipeline like NVIDIA’s RAG Blueprint?
 
-| Path | Role |
-|------|------|
-| `deception/llm/rag.py` | `retrieve_context(session, command)` |
-| `deception/llm/fallback.py` | `generate_response(session, command, retrieved_context)` |
-| `deception/llm/openai_client.py` | OpenAI-compatible Qwen HTTP client |
-| `rag/ingest.py` | Chunk virtual host YAML |
-| `rag/retrieval/embeddings.py` | MiniLM or offline hash embedder |
-| `rag/retrieval/dense.py` | Cosine dense retrieval |
+**Same stages, different scale.**
 
-## Install embeddings (optional but recommended)
+| Stage | NVIDIA Blueprint | NetOsis (this repo) |
+|-------|------------------|---------------------|
+| Ingest | Multimodal docs → object store | Virtual host YAML + `rag/corpus/*.md` |
+| Embed / index | NeMo Retriever NIMs + Elasticsearch/Milvus | MiniLM or hash embedder + in-memory cosine / hybrid lexical |
+| Retrieve | Dense + sparse + rerank | Dense + lexical + forced file hits |
+| Generate | Large Nemotron / multi-GPU NIMs | **Qwen2.5-3B** via Ollama (CPU-friendly) |
+| Guardrails | Optional NemoGuard | Prompt constraints + policy engine still owns adaptation |
+| Hardware | Multi-H100 class | Your 48GB RAM / 24 CPU lab host |
 
-```bash
-pip install -r requirements-rag.txt
-export NETOSIS_EMBED_MODE=minilm   # or auto
+So: **conceptually aligned** with [NVIDIA Build a RAG Pipeline](https://build.nvidia.com/nvidia/build-a-rag-pipeline); **not** a clone of their full stack.
+
+## Flow (unknown shell command)
+
+```text
+attacker types command
+  → deterministic engine?  yes → YAML answer (no [llm])
+  → no → retrieve_context()  [ingest host + corpus, embed, top-k]
+       → generate_response() [Qwen/mock + evidence]
+       → reply prefixed [llm] in demo mode
+       → telemetry + ATT&CK (if mapped) + policy ladder
 ```
 
-Without sentence-transformers, `NETOSIS_EMBED_MODE=auto` uses a hash embedder so tests still pass.
+## nmap / banner grabbing — LLM or not?
 
-## Qwen (CPU lab default: 3B)
+| Action | Who answers |
+|--------|-------------|
+| `nmap 192.168.1.9 -p 2222` from another host | **Real TCP/SSH stack** (Paramiko). Banner ≈ OpenSSH string. **Not LLM.** |
+| After login, `nmap -sV 192.168.30.10` | **Deterministic lore** from `deception/lore/recon_targets.yml` (no `[llm]`, no real scan) |
+| After login, random junk (`hello`) | **LLM (+ RAG)** → `[llm]` + command not found |
+| `pwd` / `ls` / `ip a` / `sudo su` / `apt install` | **Deterministic** — elevate / apt theater / YAML |
 
-```bash
-ollama pull qwen2.5:3b
-export NETOSIS_LLM_MODE=qwen
-export NETOSIS_LLM_BASE_URL=http://127.0.0.1:11434/v1
-export NETOSIS_LLM_MODEL=qwen2.5:3b
-# upgrade path only if needed: qwen2.5:7b
-```
+## Creation commands: LLM narrates, FS is truth
 
-See [llm-local.md](llm-local.md) for RAM/CPU limits on a shared Proxmox host.
+`mkdir` / `touch` / `echo >` / `rm` / `apt install`:
 
-## Defaults for CI
+1. **Engine** mutates virtual FS / packages (source of truth — no hallucination of paths)
+2. **RAG** injects an AUTHORITATIVE MUTATION RECORD + `command_effects.md` (real Ubuntu behavior)
+3. **LLM** only prints what a real shell would (usually empty on success; apt theater text)
 
-```bash
-NETOSIS_LLM_MODE=mock
-NETOSIS_EMBED_MODE=hash
-```
+LLM must not invent files that were not created. Errors stay deterministic (stderr from engine).
 
-Static lore from Antigravity is loaded from `rag/corpus/*.md` into the same index.
+Each attacker is keyed by `actor_id` (SSH peer IP → `actor-<ip>`).
+
+* Profiles persist under `data/profiles/<actor_id>.json`
+* RAG rebuild includes **this** attacker's mutations + labeled profiles
+* Other hackers appear as `OTHER attacker` docs (never mixed into shell ownership)
+* Set `NETOSIS_RAG_MULTI_ACTOR=0` to hide other profiles from retrieve
+
+## Live FS mutations → RAG
+
+`mkdir` / `touch` / `echo >` / `rm` mutate the **virtual** filesystem on the session.
+Each LLM retrieve rebuilds the corpus from that state:
+
+* create path → appears as `fs:` / `fsdir:` (and `actor.mutations`)
+* delete path → dropped from the index
+* `apt install X` → recorded in `packages_attempted` (theater only) for profiling
+
+
+Software fake shell first. Later: move the attacker into a **real decoy VM** without a
+visible break, then scale many decoys with **Kubernetes** + attack-graph mapping.
+Until then: inside-session nmap/curl/apt are **theater from lore**, never real tools.

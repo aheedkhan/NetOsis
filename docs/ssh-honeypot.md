@@ -9,7 +9,7 @@ machine and exercise deterministic commands + RAG/Qwen fallback.
 
 - Bind to a **lab VLAN / test IP**, not the Proxmox management plane if you can avoid it.
 - Default port **2222** (not 22) so you do not collide with real SSH.
-- Any password is accepted — this is intentional for a honeypot.
+- Login is **admin / admin123** by default (weak decoy). Wrong passwords fail so it does not look like an open honeypot.
 - Host key is stored under `data/ssh_host_rsa_key` (gitignored).
 - Do not put this on the public Internet without a written threat model.
 
@@ -44,7 +44,7 @@ python scripts/ssh_honeypot.py --port 2222 --bind 0.0.0.0
 
 ```bash
 ssh admin@<server-ip> -p 2222
-# password: anything
+# password: admin123
 
 pwd
 ls

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from attack_graph.model.graph import AttackGraph
 from deception.command_engine.engine import CommandResult, execute
 from deception.runtime.actions import apply_action
-from deception.runtime.actor_profile import ActorProfile
+from deception.runtime.fs_risk import mutation_risk_category
 from deception.runtime.host import Session
+from deception.runtime.profile_store import ProfileStore
 from mitre.mapper.mapper import map_command
 from policy.engine.engine import PolicyDecision, evaluate
 from telemetry.schema.events import TelemetryEvent, utc_now_iso
@@ -38,6 +40,7 @@ class VerticalSlicePipeline:
         store: JsonlTelemetryStore,
         graph: AttackGraph,
         second_host_path: Path | None = None,
+        profile_store: ProfileStore | None = None,
     ) -> None:
         self.session = session
         self.store = store
@@ -47,17 +50,39 @@ class VerticalSlicePipeline:
         self.triggered: set[str] = set()
         self.exposed_host = None
         self.last_decision: PolicyDecision | None = None
-        self.profile = ActorProfile(
-            actor_id=session.actor_id,
-            source_ip=session.source_ip,
+        data_root = Path(os.environ.get("NETOSIS_DATA_DIR", "data"))
+        self.profile_store = profile_store or ProfileStore(data_root / "profiles")
+        self.profile = self.profile_store.load(
+            session.actor_id, source_ip=session.source_ip
         )
+        if not session.created_paths and self.profile.paths_created:
+            self.profile.restore_into_session(session)
+        self.profile_store.save(self.profile)
+        self._refresh_profile_rag_docs()
         self.action_results: list[dict] = []
+
+    def _refresh_profile_rag_docs(self) -> None:
+        include_others = os.environ.get("NETOSIS_RAG_MULTI_ACTOR", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
+        # Save current first so list_profiles sees latest, then rebuild docs
+        self.session.profile_rag_docs = self.profile_store.rag_docs(
+            current_actor_id=self.session.actor_id,
+            include_others=include_others,
+        )
 
     def run_command(self, line: str) -> tuple[CommandResult, TelemetryEvent, PolicyDecision]:
         result = execute(self.session, line)
         mapping = map_command(result.command or line)
 
         risk_category = mapping.risk_category if mapping else None
+        mut_cat = mutation_risk_category(self.session)
+        if mut_cat:
+            # Creating/deleting files & package theater outrank generic discovery.
+            risk_category = mut_cat
         # Canary access escalates category for policy scoring
         cat_path = _cat_target_path(self.session, result.command or line)
         if (
@@ -97,6 +122,15 @@ class VerticalSlicePipeline:
                 "risk_category": risk_category,
                 "llm_fallback": bool(getattr(result, "llm_fallback", False)),
                 **(
+                    {
+                        "created": list(self.session.last_created),
+                        "deleted": list(self.session.last_deleted),
+                        "packages": list(self.session.last_packages),
+                    }
+                    if (self.session.last_created or self.session.last_deleted or self.session.last_packages)
+                    else {}
+                ),
+                **(
                     {"verbose": True, "cwd": self.session.cwd}
                     if self.session.verbose_telemetry
                     else {}
@@ -129,6 +163,9 @@ class VerticalSlicePipeline:
             risk_score=decision.risk_score,
             level=decision.level,
         )
+        self.profile.sync_session_mutations(self.session)
+        self.profile_store.save(self.profile)
+        self._refresh_profile_rag_docs()
         return result, event, decision
 
     def _record_action_on_graph(self, action_id: str, meta: dict) -> None:

@@ -32,3 +32,27 @@ mappings:
     technique_name: System Network Configuration Discovery
     confidence: 0.85
     risk_category: Discovery
+  - behavior: create_or_modify_file
+    commands: [mkdir, touch]
+    technique: T1036
+    technique_name: Masquerading
+    confidence: 0.55
+    risk_category: FS_create
+  - behavior: indicator_removal_file_deletion
+    commands: [rm, rmdir]
+    technique: "T1070.004"
+    technique_name: "Indicator Removal: File Deletion"
+    confidence: 0.65
+    risk_category: FS_delete
+  - behavior: ingress_tool_transfer_apt
+    commands: [apt, apt-get]
+    technique: T1105
+    technique_name: Ingress Tool Transfer
+    confidence: 0.5
+    risk_category: Package_install
+  - behavior: network_service_discovery_nmap
+    commands: [nmap]
+    technique: T1046
+    technique_name: Network Service Discovery
+    confidence: 0.8
+    risk_category: Discovery

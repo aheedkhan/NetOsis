@@ -9,6 +9,13 @@ weights:
   Execution: 8
   Persistence: 8
   Canary_interaction: 6
+  # Virtual FS / package theater (creating files & dirs, deletes, apt)
+  FS_create_tmp: 1
+  FS_create: 2
+  FS_create_sensitive: 5
+  FS_delete: 2
+  FS_delete_sensitive: 4
+  Package_install: 3
 
 # Progressive deception ladder (D08 sandbox deferred).
 # evaluate() fires the first action whose min_score is met and not yet triggered.
