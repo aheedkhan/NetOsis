@@ -103,9 +103,56 @@ class Session:
     canary_paths: set[str] = field(default_factory=set)
     revealed_segments: list[dict[str, Any]] = field(default_factory=list)
     deception_log: list[str] = field(default_factory=list)
+    # Live FS / package theater — drives RAG rebuild + actor profiling
+    created_paths: list[str] = field(default_factory=list)
+    deleted_paths: list[str] = field(default_factory=list)
+    packages_attempted: list[str] = field(default_factory=list)
+    # Injected by pipeline/honeypot: multi-actor profile RAG snippets
+    profile_rag_docs: list[dict[str, Any]] = field(default_factory=list)
+    # Per-command mutation batch (reset at start of each execute)
+    last_created: list[str] = field(default_factory=list)
+    last_deleted: list[str] = field(default_factory=list)
+    last_packages: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.user:
             self.user = self.host.default_user
         if self.cwd == "/":
             self.cwd = self.host.default_cwd()
+
+    def begin_mutation_batch(self) -> None:
+        self.last_created = []
+        self.last_deleted = []
+        self.last_packages = []
+
+    @property
+    def is_root(self) -> bool:
+        return self.user == "root"
+
+    def shell_prompt(self) -> str:
+        """Bash-like prompt; `#` after sudo elevation."""
+        mark = "#" if self.is_root else "$"
+        return f"{self.user}@{self.host.hostname}:{self.cwd}{mark} "
+
+    def note_created(self, path: str) -> None:
+        p = path if path == "/" else path.rstrip("/") or "/"
+        if p not in self.created_paths:
+            self.created_paths.append(p)
+        if p in self.deleted_paths:
+            self.deleted_paths = [x for x in self.deleted_paths if x != p]
+        if p not in self.last_created:
+            self.last_created.append(p)
+
+    def note_deleted(self, path: str) -> None:
+        p = path if path == "/" else path.rstrip("/") or "/"
+        if p not in self.deleted_paths:
+            self.deleted_paths.append(p)
+        self.created_paths = [x for x in self.created_paths if x != p and not x.startswith(p.rstrip("/") + "/")]
+        if p not in self.last_deleted:
+            self.last_deleted.append(p)
+
+    def note_package(self, name: str) -> None:
+        if name and name not in self.packages_attempted:
+            self.packages_attempted.append(name)
+        if name and name not in self.last_packages:
+            self.last_packages.append(name)

@@ -17,4 +17,5 @@ Configure **Services → Kea DHCP → Subnets** for VLANs 10/20/30/40 (pools `.1
 
 ## Log
 
+- 2026-09-27 | Cursor | SSH banner OpenSSH-like for nmap; RAG vs NVIDIA docs; corpus `services_and_banners.md`; `[llm]` demo mark
 - 2026-09-27 | Cursor | Ingest OPNSENSE_SDN_GUIDE; Kea DHCP; fix HHP→SOC allow in policy notes

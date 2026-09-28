@@ -22,6 +22,7 @@ def test_ingest_builds_identity_and_files() -> None:
     ids = {d.doc_id for d in docs}
     assert "host.identity" in ids
     assert any(i.startswith("fs:") for i in ids)
+    assert any(i.startswith("fsdir:") for i in ids)
     assert "corpus:network_topology" in ids
     assert "corpus:internal_tools" in ids
     assert "corpus:system_architecture" in ids

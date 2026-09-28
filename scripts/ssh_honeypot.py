@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Public SSH honeypot front-door for the NetOsis fake shell.
 
-Accepts any password, drops the peer into VerticalSlicePipeline
-(deterministic cmds + RAG/Qwen fallback). Telemetry + attack graph persist
-under --data-dir.
+Accepts a weak decoy password (default admin / admin123) so login looks
+like a real misconfigured host — not "any password works." Drops the peer
+into VerticalSlicePipeline (deterministic cmds + RAG/Qwen fallback).
+Telemetry + attack graph persist under --data-dir.
 
 Example:
   NETOSIS_LLM_MODE=qwen NETOSIS_LLM_MODEL=qwen2.5:3b \\
@@ -63,9 +64,14 @@ class HoneypotInterface(paramiko.ServerInterface):
         return "password"
 
     def check_auth_password(self, username: str, password: str) -> int:
-        # Honeypot: accept anything; password itself is never logged here.
-        self.username = username or "admin"
-        return paramiko.AUTH_SUCCESSFUL
+        # Weak decoy creds only — rejects random guesses so scanners don't
+        # flag "accepts any password." Password value is never logged.
+        expect_user = os.environ.get("NETOSIS_SSH_USER", "admin")
+        expect_pass = os.environ.get("NETOSIS_SSH_PASSWORD", "admin123")
+        if (username or "") == expect_user and password == expect_pass:
+            self.username = username
+            return paramiko.AUTH_SUCCESSFUL
+        return paramiko.AUTH_FAILED
 
     def check_channel_pty_request(
         self, channel, term, width, height, pixelwidth, pixelheight, modes
@@ -84,6 +90,11 @@ def handle_connection(
     second_host: Path,
 ) -> None:
     transport = paramiko.Transport(client_sock)
+    # Believable OpenSSH banner for nmap -sV / banner grab (not LLM).
+    transport.local_version = os.environ.get(
+        "NETOSIS_SSH_BANNER",
+        "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10",
+    )
     transport.add_server_key(host_key)
     server = HoneypotInterface()
 
@@ -124,7 +135,7 @@ def handle_connection(
     )
 
     def prompt() -> str:
-        return f"{session.user}@{vhost.hostname}:{session.cwd}$ "
+        return session.shell_prompt()
 
     try:
         channel.send(f"Welcome to {vhost.os}\r\n")
@@ -230,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
     sock.bind((args.bind, args.port))
     sock.listen(50)
     print(f"[*] Honeypot listening on {args.bind}:{args.port}")
-    print(f"[*] Connect: ssh admin@<server-ip> -p {args.port}  (any password)")
+    user = os.environ.get("NETOSIS_SSH_USER", "admin")
+    print(f"[*] Connect: ssh {user}@<server-ip> -p {args.port}  (password: decoy, see NETOSIS_SSH_PASSWORD)")
 
     try:
         while True:

@@ -36,7 +36,7 @@ def test_dense_hash_retriever_ranks_files() -> None:
 def test_system_prompt_is_state_constrained() -> None:
     session = Session(host=VirtualHost.load(HOST), session_id="t")
     prompt = build_system_prompt(session, "uname -a")
-    assert "Do NOT invent" in prompt
+    assert "ANTI-HALLUCINATION" in prompt or "Never invent" in prompt
     assert "ent-web-01" in prompt
 
 
@@ -46,3 +46,40 @@ def test_generate_response_accepts_retrieved_context() -> None:
     result = generate_response(session, "id", ctx, client=MockLlmClient())
     assert result.llm_fallback is True
     assert "admin" in result.stdout
+    assert "[llm]" in result.stdout
+
+
+def test_unknown_command_marked_as_llm() -> None:
+    from deception.command_engine.engine import execute
+
+    session = Session(host=VirtualHost.load(HOST), session_id="t")
+    r = execute(session, "zzznonsense_cmd_99")
+    assert r.llm_fallback is True
+    blob = r.stdout + r.stderr
+    assert "[llm]" in blob
+    assert "command not found" in blob
+
+
+def test_sudo_elevates_and_id_shows_root() -> None:
+    from deception.command_engine.engine import execute
+
+    session = Session(host=VirtualHost.load(HOST), session_id="t")
+    execute(session, "sudo su")
+    assert session.user == "root"
+    assert session.shell_prompt().endswith("# ")
+    r = execute(session, "id")
+    assert "uid=0(root)" in r.stdout
+
+
+def test_apt_and_nmap_are_theater_not_llm() -> None:
+    from deception.command_engine.engine import execute
+
+    session = Session(host=VirtualHost.load(HOST), session_id="t")
+    apt = execute(session, "sudo apt install nmap")
+    # apt stdout narrated by LLM but grounded; package still profiled
+    assert "already the newest" in (apt.stdout + apt.stderr) or apt.llm_fallback
+    assert "nmap" in session.packages_attempted
+    nm = execute(session, "nmap -sV 192.168.30.10")
+    assert nm.llm_fallback is False
+    assert "OpenSSH" in nm.stdout
+    assert "nginx" in nm.stdout

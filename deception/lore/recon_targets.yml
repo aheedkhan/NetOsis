@@ -1,0 +1,37 @@
+# Fake recon targets for nmap/curl theater (no real scanning).
+# Attacker on the decoy "scans" these — output is fabricated from this file.
+
+always_visible:
+  - ip: "127.0.0.1"
+    hostname: "localhost"
+    ports:
+      - { port: 22, state: open, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10" }
+      - { port: 80, state: open, service: http, version: "nginx 1.18.0" }
+  - ip: "192.168.30.10"
+    hostname: "ent-web-01.corp.local"
+    ports:
+      - { port: 22, state: open, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10" }
+      - { port: 80, state: open, service: http, version: "nginx 1.18.0" }
+  - ip: "192.168.30.31"
+    hostname: "ent-jump-01.corp.local"
+    ports:
+      - { port: 22, state: open, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10" }
+  - ip: "192.168.30.254"
+    hostname: "gw-ent.corp.local"
+    ports: []
+    note: "filtered"
+
+# Shown only after deception policy exposes that hostname (e.g. D01 → finance-db-01)
+when_exposed:
+  - hostname: finance-db-01
+    ip: "192.168.10.10"
+    ports:
+      - { port: 22, state: open, service: ssh, version: "OpenSSH 8.2p1" }
+      - { port: 5432, state: open, service: postgresql, version: "PostgreSQL 14.11" }
+
+# --- USER FILL-IN: add more decoy VMs here as the lab grows (later: K8s-managed) ---
+# always_visible / when_exposed entries:
+#   - ip: "192.168.X.Y"
+#     hostname: "name.corp.local"
+#     ports:
+#       - { port: 443, state: open, service: https, version: "..." }

@@ -137,13 +137,61 @@ def build_corpus(
         )
 
     for path, meta in sorted(host.filesystem.items()):
-        if meta.get("type") != "file":
+        kind = meta.get("type", "file")
+        if kind == "dir":
+            origin = "attacker-created" if path in session.created_paths else "baseline"
+            docs.append(
+                RagDocument(
+                    doc_id=f"fsdir:{path}",
+                    text=f"Directory {path} exists on {host.hostname} ({origin}).",
+                    metadata={"type": "dir", "path": path, "origin": origin},
+                )
+            )
             continue
+        if kind != "file":
+            continue
+        origin = "attacker-created" if path in session.created_paths else "baseline"
         docs.append(
             RagDocument(
                 doc_id=f"fs:{path}",
-                text=_file_snippet(path, meta),
-                metadata={"type": "file", "path": path, "canary": bool(meta.get("canary"))},
+                text=_file_snippet(path, meta) + f"\n(origin: {origin})",
+                metadata={
+                    "type": "file",
+                    "path": path,
+                    "canary": bool(meta.get("canary")),
+                    "origin": origin,
+                },
+            )
+        )
+
+    if session.created_paths or session.deleted_paths or session.packages_attempted:
+        docs.append(
+            RagDocument(
+                doc_id=f"actor.mutations:{session.actor_id}",
+                text=(
+                    f"CURRENT attacker {session.actor_id} ({session.source_ip}) mutations "
+                    f"on {host.hostname}. "
+                    f"Created paths: {', '.join(session.created_paths) or '(none)'}. "
+                    f"Deleted paths: {', '.join(session.deleted_paths) or '(none)'}. "
+                    f"Packages they tried to install (theater): "
+                    f"{', '.join(session.packages_attempted) or '(none)'}."
+                ),
+                metadata={
+                    "type": "actor_profile",
+                    "actor_id": session.actor_id,
+                    "is_current": True,
+                },
+            )
+        )
+
+    # Persisted multi-hacker profiles (current + others, clearly labeled)
+    profile_docs = getattr(session, "profile_rag_docs", None) or []
+    for pd in profile_docs:
+        docs.append(
+            RagDocument(
+                doc_id=str(pd["doc_id"]),
+                text=str(pd["text"]),
+                metadata=dict(pd.get("metadata") or {}),
             )
         )
 

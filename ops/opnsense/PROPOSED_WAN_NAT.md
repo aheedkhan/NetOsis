@@ -30,7 +30,7 @@ Associated firewall rules on WAN: allow those ports only from lab/Kali ranges if
 # On Kali (vmbr0)
 nmap -sV 172.30.226.100
 curl -I http://172.30.226.100/
-ssh admin@172.30.226.100   # lands in fake shell (any password)
+ssh admin@172.30.226.100   # lands in fake shell (password: admin123)
 ```
 
 ## Must not
