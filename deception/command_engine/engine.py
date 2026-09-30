@@ -131,6 +131,22 @@ def execute(session: Session, line: str) -> CommandResult:
         result.command = original_line
         return result
 
+    def _run_sandbox(cmd_line: str) -> CommandResult:
+        from deception.runtime.sandbox import get_sandbox_client
+
+        sb = get_sandbox_client().run(session, cmd_line)
+        text = (sb.stdout or "") + (sb.stderr or "")
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if sb.exit_code != 0:
+            return CommandResult(
+                stdout="",
+                stderr=text,
+                exit_code=sb.exit_code,
+                command=original_line,
+            )
+        return CommandResult(stdout=text, stderr="", exit_code=0, command=original_line)
+
     # Simple redirection: echo TEXT > path / >> path (before shlex eats >)
     redir = None
     if ">>" in line or (" > " in line or line.count(">") == 1 and " >" in line):
@@ -153,6 +169,12 @@ def execute(session: Session, line: str) -> CommandResult:
     cmd = parts[0]
     args = parts[1:]
     host = session.host
+
+    # Phase-1 sandbox: external curl/wget/git clone and ./payloads
+    from deception.runtime.sandbox import should_sandbox
+
+    if should_sandbox(original_line):
+        return _run_sandbox(original_line)
 
     if cmd == "pwd":
         return CommandResult(stdout=session.cwd + "\n", command=line)
@@ -216,8 +238,9 @@ def execute(session: Session, line: str) -> CommandResult:
     if cmd == "curl":
         from deception.llm.fake_shell import curl_head_localhost
 
+        # Lab-local only (external already sandboxed above)
         joined = " ".join(args)
-        if "127.0.0.1" in joined or "localhost" in joined or not args:
+        if "127.0.0.1" in joined or "localhost" in joined or "192.168." in joined or not args:
             if "-I" in args or "-I" in line:
                 return CommandResult(stdout=curl_head_localhost(), command=line)
             return CommandResult(
@@ -228,6 +251,14 @@ def execute(session: Session, line: str) -> CommandResult:
             stdout="",
             stderr="curl: (28) Connection timed out after 5000 milliseconds\n",
             exit_code=28,
+            command=line,
+        )
+
+    if cmd == "wget":
+        return CommandResult(
+            stdout="",
+            stderr="wget: unable to resolve host address\n",
+            exit_code=1,
             command=line,
         )
 

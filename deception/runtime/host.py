@@ -113,6 +113,8 @@ class Session:
     last_created: list[str] = field(default_factory=list)
     last_deleted: list[str] = field(default_factory=list)
     last_packages: list[str] = field(default_factory=list)
+    # Phase-1 sandbox job log (feeds actor RAG)
+    sandbox_jobs: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.user:

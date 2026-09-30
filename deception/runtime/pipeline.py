@@ -83,6 +83,25 @@ class VerticalSlicePipeline:
         if mut_cat:
             # Creating/deleting files & package theater outrank generic discovery.
             risk_category = mut_cat
+        # Sandbox external fetch / payload
+        if self.session.sandbox_jobs and self.session.sandbox_jobs[-1].get("command") == (
+            result.command or line.strip()
+        ):
+            job = self.session.sandbox_jobs[-1]
+            risk_category = (
+                "Payload_transfer"
+                if job.get("contained") or job.get("classification") == "malware"
+                else "Package_install"
+            )
+            actor = f"actor:{self.session.actor_id}"
+            sb_node = f"sandbox:{job.get('job_id')}"
+            self.graph.add_node(
+                sb_node,
+                type="SANDBOX_JOB",
+                classification=job.get("classification"),
+                contained=job.get("contained"),
+            )
+            self.graph.add_edge(actor, sb_node, "sandbox_exec")
         # Canary access escalates category for policy scoring
         cat_path = _cat_target_path(self.session, result.command or line)
         if (

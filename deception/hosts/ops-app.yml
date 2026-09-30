@@ -1,0 +1,89 @@
+# Operations app decoy (OPS-HP-01) — low-level honeypot on VLAN 20.
+hostname: ops-app-01
+role: ops-app-hhp
+os: Ubuntu 22.04.4 LTS
+vlan: 20
+ip: 192.168.20.10
+gateway: 192.168.20.254
+fqdn: ops-app-01.corp.local
+
+users:
+  - name: admin
+    uid: 1000
+    home: /home/admin
+  - name: svc_ops_sync
+    uid: 1001
+    home: /home/svc_ops_sync
+  - name: root
+    uid: 0
+    home: /root
+
+default_user: admin
+cwd: /home/admin
+
+filesystem:
+  /:
+    type: dir
+  /home:
+    type: dir
+  /home/admin:
+    type: dir
+  /home/admin/.bashrc:
+    type: file
+    content: |
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  /home/admin/notes.txt:
+    type: file
+    content: |
+      Ops checklist
+      - verify rsync job svc_ops_sync
+      - snapshot under /var/backups/ops/
+      - escalate to Marcus Sterling if ERP sync fails
+  /var:
+    type: dir
+  /var/backups:
+    type: dir
+  /var/backups/ops:
+    type: dir
+  /etc:
+    type: dir
+  /etc/hostname:
+    type: file
+    content: |
+      ops-app-01
+  /etc/hosts:
+    type: file
+    content: |
+      127.0.0.1 localhost
+      192.168.20.10 ops-app-01.corp.local ops-app-01
+
+services:
+  - name: ssh
+    port: 22
+
+processes:
+  - user: root
+    pid: 1
+    cmd: "/sbin/init"
+  - user: root
+    pid: 412
+    cmd: "/usr/sbin/sshd -D"
+  - user: admin
+    pid: 1501
+    cmd: "-bash"
+
+network:
+  interfaces:
+    - name: lo
+      addresses: ["127.0.0.1/8"]
+    - name: eth0
+      addresses: ["192.168.20.10/24"]
+  routes:
+    - destination: default
+      gateway: 192.168.20.254
+      dev: eth0
+    - destination: 192.168.20.0/24
+      gateway: null
+      dev: eth0
+
+visible: true

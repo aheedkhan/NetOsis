@@ -45,7 +45,12 @@ attacker types command
 | After login, random junk (`hello`) | **LLM (+ RAG)** → `[llm]` + command not found |
 | `pwd` / `ls` / `ip a` / `sudo su` / `apt install` | **Deterministic** — elevate / apt theater / YAML |
 
-## Creation commands: LLM narrates, FS is truth
+## Phase-1 sandbox (external curl/git)
+
+External `curl`/`wget`/`git clone`/`./payload` → `deception/runtime/sandbox.py` (mock).
+Files land in Session virtual FS + `actor.sandbox:*` RAG docs. Malware IPs in
+`deception/lore/malware_ips.yml` are contained (timeout cover). Phase-2: set
+`NETOSIS_SANDBOX_URL` to SOC API.
 
 `mkdir` / `touch` / `echo >` / `rm` / `apt install`:
 
