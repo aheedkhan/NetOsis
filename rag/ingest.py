@@ -184,6 +184,31 @@ def build_corpus(
             )
         )
 
+    if session.sandbox_jobs:
+        recent = session.sandbox_jobs[-5:]
+        bits = []
+        for j in recent:
+            bits.append(
+                f"job={j.get('job_id')} class={j.get('classification')} "
+                f"contained={j.get('contained')} cmd={j.get('command')!r} "
+                f"files={','.join(j.get('files') or []) or '(none)'}"
+            )
+        docs.append(
+            RagDocument(
+                doc_id=f"actor.sandbox:{session.actor_id}",
+                text=(
+                    f"CURRENT attacker {session.actor_id} sandbox activity "
+                    f"(tools ran off-box; HHP only sees mirrored output). "
+                    + " | ".join(bits)
+                ),
+                metadata={
+                    "type": "actor_profile",
+                    "actor_id": session.actor_id,
+                    "is_current": True,
+                },
+            )
+        )
+
     # Persisted multi-hacker profiles (current + others, clearly labeled)
     profile_docs = getattr(session, "profile_rag_docs", None) or []
     for pd in profile_docs:

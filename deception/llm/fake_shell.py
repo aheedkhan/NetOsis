@@ -59,7 +59,11 @@ def format_nmap_report(session: Session, target_ip: str) -> str:
         "Host is up (0.00042s latency).",
     ]
     if not ports:
-        lines.append("All 1000 scanned ports on this host are filtered")
+        note = t.get("note") or "filtered"
+        if note == "filtered":
+            lines.append("All 1000 scanned ports on this host are filtered")
+        else:
+            lines.append("All 1000 scanned ports on this host are closed")
     else:
         closed = max(0, 1000 - len(ports))
         lines.append(f"Not shown: {closed} closed ports")

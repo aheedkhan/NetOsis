@@ -1,28 +1,35 @@
-# Corporate Network Topology (RAG / viva)
+# Corporate Network Topology (RAG / viva) — final FYP inventory
+
+## No employee desktop VMs
+
+Server-focused lab: honeypots (LXC) + real servers (VMs) + SOC. Saves RAM for Qwen/Wazuh.
 
 ## Jumpboxes
 
-* **Management jumpbox** `172.30.227.1` — VPN/FreeRDP to administer Proxmox & OPNsense. Not on VLAN 10/20/30.
-* **Enterprise jumpbox** `192.168.30.31` — internal hop to manage enterprise servers on VLAN 30.
+* **Management jumpbox** `172.30.227.1` — VPN/FreeRDP to Proxmox & OPNsense (not on FYP VLANs).
+* **Enterprise jump / admin** `192.168.30.31` (`ENT-JUMP-01`) — manage real servers; **filtered from HHP**.
 
 ## Fake Internet (vmbr0)
 
-* Subnet `172.30.226.0/24` simulates the public Internet.
-* Kali attacks the OPNsense WAN address (lab public IP).
-* NAT: WAN `:80` → real web `192.168.30.40`; WAN `:22` → honeypot `192.168.30.10:2222`.
+* Kali `172.30.226.50` → OPNsense WAN `172.30.226.100`.
+* NAT: WAN `:80` → real web `192.168.30.40`; WAN `:22` → WEB-HP `192.168.30.10:2222` (intentional loophole).
 
-## VLAN Segments
+## VLAN inventory (static)
 
-* **VLAN 10 Finance** `192.168.10.0/24` gw `.254` — employees (`.31+`) + Finance HHPs (`.1–.30`).
-* **VLAN 20 Operations** `192.168.20.0/24` gw `.254` — employees + Ops HHPs.
-* **VLAN 30 Enterprise** `192.168.30.0/24` gw `.254` — **no employees**; ENT jump, real servers, Enterprise HHP (`ent-web-01` = `192.168.30.10`).
-* **VLAN 40 SOC** `192.168.40.0/24` gw `.254` — NetOsis controller, LLM/Ollama, Wazuh.
-* **Management** `172.30.226.0/24` — restricted hypervisor/WAN lab fabric.
+| Node | VLAN | IP | Form | Role |
+|------|------|-----|------|------|
+| FIN-HP-01 | 10 | `.10` | LXC HP | Finance decoy |
+| FINANCE-DB-REAL-01 | 10 | `.50` | VM | Real backup/DB |
+| OPS-HP-01 | 20 | `.10` | LXC HP | Ops decoy |
+| OPS-APP-REAL-01 | 20 | `.50` | VM | Real ERP/ops |
+| WEB-HP-01 / ent-web-01 | 30 | `.10` | LXC HP | Entry SSH honeypot |
+| ENT-JUMP-01 | 30 | `.31` | VM | Admin SSH |
+| ENT-WEB-REAL-01 | 30 | `.40` | VM | Public nginx |
+| netosis-controller + Ollama | 40 | `.31` | VM | LLM/RAG/sandbox API |
+| Wazuh (optional) | 40 | `.40` | VM | SIEM |
 
-## IP policy
+Gateways `.254`. DHCP `.100–.200` reserved (unused for these nodes).
 
-* `.1`–`.30` honeypots · `.31`–`.253` reals · `.254` gateway
+## HHP egress
 
-## Routing
-
-Inter-VLAN via OPNsense. Same-VLAN HHP isolation via Proxmox firewall (default-deny out from HHP LXCs).
+HPs may reach **SOC only**. Proxmox FW denies HHP → real `.31–.253` (same-VLAN L2 bypass mitigation).

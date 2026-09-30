@@ -1,0 +1,31 @@
+# Structured personas / service accounts for engine + RAG cross-ref.
+personas:
+  - id: evance
+    name: Eleanor Vance
+    role: CFO
+    email: evance@netosis.internal
+  - id: msterling
+    name: Marcus Sterling
+    role: Lead Systems Ops
+    email: msterling@netosis.internal
+  - id: coswald
+    name: Clara Oswald
+    role: SOC Lead
+    email: coswald@netosis.internal
+  - id: jwhitfield
+    name: James Whitfield
+    role: Enterprise Admin
+    email: jwhitfield@netosis.internal
+
+service_accounts:
+  - name: svc_finance_backup
+    home: /home/svc_finance_backup
+    related_host: finance-db-01
+    backup_path: /var/backups/finance/fin_db_q3_backup.sql.gz
+  - name: svc_ops_sync
+    home: /home/svc_ops_sync
+    related_host: ops-app-01
+    config: /etc/ops_sync/rsync.conf
+  - name: svc_web_deploy
+    home: /home/svc_web_deploy
+    related_host: ent-web-01
