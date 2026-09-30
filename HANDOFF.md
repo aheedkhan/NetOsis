@@ -26,8 +26,10 @@
 
 ## User now
 
-1. Review FW + deploy checklists; apply Proxmox/OPNsense only when ready.
-2. Optional: Phase-2 `NETOSIS_SANDBOX_URL=http://192.168.40.31:8000` after k3s.
+1. **Bring VPN up** — laptop cannot reach Proxmox until then.
+2. Follow [`ops/proxmox/SHIFT_TO_SERVER.md`](ops/proxmox/SHIFT_TO_SERVER.md): create 3 HHP LXCs → `deploy_to_lab.sh` → SOC for Ollama.
+3. Script: `scripts/proxmox_create_guests.sh --plan` then `--hhp-only` on PVE.
+4. OPNsense NAT only after guests are up (separate approve).
 
 ## Log
 
