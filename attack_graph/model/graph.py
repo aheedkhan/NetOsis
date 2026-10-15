@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,25 +13,36 @@ class AttackGraph:
 
     nodes: dict[str, dict[str, Any]] = field(default_factory=dict)
     edges: list[dict[str, Any]] = field(default_factory=list)
+    # One graph is shared by every SSH session thread.
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, repr=False, compare=False
+    )
 
     def add_node(self, node_id: str, **attrs: Any) -> None:
-        if node_id not in self.nodes:
-            self.nodes[node_id] = {"id": node_id, **attrs}
-        else:
-            self.nodes[node_id].update(attrs)
+        with self._lock:
+            if node_id not in self.nodes:
+                self.nodes[node_id] = {"id": node_id, **attrs}
+            else:
+                self.nodes[node_id].update(attrs)
 
     def add_edge(self, source: str, target: str, relation: str, **attrs: Any) -> None:
-        self.edges.append(
-            {"source": source, "target": target, "relation": relation, **attrs}
-        )
+        with self._lock:
+            self.edges.append(
+                {"source": source, "target": target, "relation": relation, **attrs}
+            )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"nodes": list(self.nodes.values()), "edges": list(self.edges)}
+        with self._lock:
+            return json.loads(
+                json.dumps({"nodes": list(self.nodes.values()), "edges": list(self.edges)})
+            )
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        tmp.replace(path)
 
     @classmethod
     def load(cls, path: str | Path) -> AttackGraph:

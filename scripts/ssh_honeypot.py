@@ -31,6 +31,7 @@ if str(ROOT) not in sys.path:
 from attack_graph.model.graph import AttackGraph
 from deception.runtime.host import Session, VirtualHost
 from deception.runtime.pipeline import VerticalSlicePipeline
+from telemetry.schema.events import TelemetryEvent, utc_now_iso
 from telemetry.storage.jsonl import JsonlTelemetryStore
 
 
@@ -51,9 +52,45 @@ def _load_dotenv(path: Path) -> None:
 
 
 class HoneypotInterface(paramiko.ServerInterface):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        peer_ip: str = "0.0.0.0",
+        store: JsonlTelemetryStore | None = None,
+        target_host: str = "",
+        target_ip: str = "",
+    ) -> None:
         super().__init__()
         self.username = "admin"
+        self.peer_ip = peer_ip
+        self.store = store
+        self.target_host = target_host
+        self.target_ip = target_ip
+        self.connection_id = str(uuid.uuid4())
+        self.exec_command: str | None = None
+        self.request_event = threading.Event()
+
+    def _log_auth(self, username: str, success: bool) -> None:
+        # Login attempts are the bulk of real Internet traffic — record them.
+        if self.store is None:
+            return
+        self.store.append(
+            TelemetryEvent(
+                timestamp=utc_now_iso(),
+                session_id=self.connection_id,
+                actor_id=f"actor-{self.peer_ip}",
+                source_ip=self.peer_ip,
+                target_host=self.target_host,
+                target_ip=self.target_ip,
+                event_type="auth_success" if success else "auth_failure",
+                command="",
+                result="",
+                technique="T1078" if success else "T1110",
+                technique_name="Valid Accounts" if success else "Brute Force",
+                technique_confidence=0.6 if success else 0.5,
+                behavior="ssh_login",
+                extra={"username": username[:64]},
+            )
+        )
 
     def check_channel_request(self, kind: str, chanid: int) -> int:
         if kind == "session":
@@ -70,7 +107,9 @@ class HoneypotInterface(paramiko.ServerInterface):
         expect_pass = os.environ.get("NETOSIS_SSH_PASSWORD", "admin123")
         if (username or "") == expect_user and password == expect_pass:
             self.username = username
+            self._log_auth(username, True)
             return paramiko.AUTH_SUCCESSFUL
+        self._log_auth(username or "", False)
         return paramiko.AUTH_FAILED
 
     def check_channel_pty_request(
@@ -79,7 +118,31 @@ class HoneypotInterface(paramiko.ServerInterface):
         return True
 
     def check_channel_shell_request(self, channel) -> bool:
+        self.request_event.set()
         return True
+
+    def check_channel_exec_request(self, channel, command) -> bool:
+        # Bots mostly use `ssh host 'cmd'` instead of an interactive shell.
+        self.exec_command = command.decode("utf-8", errors="ignore").strip()
+        self.request_event.set()
+        return True
+
+
+def _run_safely(pipeline: VerticalSlicePipeline, cmd: str, peer_ip: str):
+    """Run one command; any internal error looks like a normal shell failure."""
+    try:
+        result, event, decision = pipeline.run_command(cmd)
+    except Exception as exc:
+        print(f"  [error] {peer_ip} cmd={cmd!r}: {exc!r}")
+        name = cmd.split(" ", 1)[0]
+        return f"bash: {name}: command not found\n", 127
+    out = (result.stdout or "") + (result.stderr or "")
+    tag = "llm" if getattr(result, "llm_fallback", False) else "det"
+    print(
+        f"  [{tag}] {peer_ip} cmd={cmd!r} action={decision.action} "
+        f"tech={event.technique} score={decision.risk_score}"
+    )
+    return out, result.exit_code
 
 
 def handle_connection(
@@ -88,7 +151,18 @@ def handle_connection(
     data_dir: Path,
     host_yaml: Path,
     second_host: Path,
+    graph: AttackGraph,
+    graph_lock: threading.Lock,
 ) -> None:
+    try:
+        peer_ip = client_sock.getpeername()[0]
+    except OSError:
+        peer_ip = "0.0.0.0"
+
+    store = JsonlTelemetryStore(data_dir / "telemetry.jsonl")
+    graph_path = data_dir / "attack_graph.json"
+    vhost = VirtualHost.load(host_yaml)
+
     transport = paramiko.Transport(client_sock)
     # Believable OpenSSH banner for nmap -sV / banner grab (not LLM).
     transport.local_version = os.environ.get(
@@ -96,11 +170,13 @@ def handle_connection(
         "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10",
     )
     transport.add_server_key(host_key)
-    server = HoneypotInterface()
+    server = HoneypotInterface(
+        peer_ip=peer_ip, store=store, target_host=vhost.hostname, target_ip=vhost.ip
+    )
 
     try:
         transport.start_server(server=server)
-    except paramiko.SSHException:
+    except (paramiko.SSHException, EOFError, OSError):
         client_sock.close()
         return
 
@@ -108,21 +184,11 @@ def handle_connection(
     if channel is None:
         transport.close()
         return
+    server.request_event.wait(10)
 
-    store = JsonlTelemetryStore(data_dir / "telemetry.jsonl")
-    graph_path = data_dir / "attack_graph.json"
-    graph = AttackGraph.load(graph_path) if graph_path.exists() else AttackGraph()
-
-    try:
-        peer = client_sock.getpeername()
-        peer_ip = peer[0]
-    except OSError:
-        peer_ip = "0.0.0.0"
-
-    vhost = VirtualHost.load(host_yaml)
     session = Session(
         host=vhost,
-        session_id=str(uuid.uuid4()),
+        session_id=server.connection_id,
         actor_id=f"actor-{peer_ip}",
         source_ip=peer_ip,
         user=server.username,
@@ -137,10 +203,29 @@ def handle_connection(
     def prompt() -> str:
         return session.shell_prompt()
 
+    def save_graph() -> None:
+        with graph_lock:
+            graph.save(graph_path)
+
+    if server.exec_command is not None:
+        try:
+            out, code = _run_safely(pipeline, server.exec_command, peer_ip)
+            if out:
+                channel.sendall(out)
+            channel.send_exit_status(code)
+            save_graph()
+        except OSError:
+            pass
+        finally:
+            channel.close()
+            transport.close()
+        return
+
     try:
         channel.send(f"Welcome to {vhost.os}\r\n")
         channel.send(prompt())
         buf = ""
+        escape = ""
         while True:
             try:
                 raw = channel.recv(1)
@@ -153,6 +238,17 @@ def handle_connection(
             except Exception:
                 continue
 
+            # Swallow ANSI escape sequences (arrow keys etc.) instead of
+            # appending "[A" to the command buffer.
+            if escape:
+                escape += char
+                if len(escape) > 1 and (char.isalpha() or char == "~" or len(escape) > 8):
+                    escape = ""
+                continue
+            if char == "\x1b":
+                escape = char
+                continue
+
             if char in ("\r", "\n"):
                 if char == "\r":
                     channel.send("\r\n")
@@ -162,21 +258,10 @@ def handle_connection(
                     channel.send("logout\r\n")
                     break
                 if cmd:
-                    result, event, decision = pipeline.run_command(cmd)
-                    out = (result.stdout or "") + (result.stderr or "")
+                    out, _code = _run_safely(pipeline, cmd, peer_ip)
                     if out:
                         channel.send(out.replace("\n", "\r\n"))
-                    if getattr(result, "llm_fallback", False):
-                        print(
-                            f"  [llm] {peer_ip} cmd={cmd!r} "
-                            f"action={decision.action} tech={event.technique}"
-                        )
-                    else:
-                        print(
-                            f"  [det] {peer_ip} cmd={cmd!r} "
-                            f"action={decision.action} score={decision.risk_score}"
-                        )
-                    graph.save(graph_path)
+                    save_graph()
                 channel.send(prompt())
             elif char == "\x03":
                 channel.send("^C\r\n")
@@ -244,13 +329,21 @@ def main(argv: list[str] | None = None) -> int:
     user = os.environ.get("NETOSIS_SSH_USER", "admin")
     print(f"[*] Connect: ssh {user}@<server-ip> -p {args.port}  (password: decoy, see NETOSIS_SSH_PASSWORD)")
 
+    graph_path = args.data_dir / "attack_graph.json"
+    graph = AttackGraph.load(graph_path)
+    graph_lock = threading.Lock()
+
     try:
         while True:
             client, addr = sock.accept()
+            client.settimeout(600)  # drop idle/stalled connections
             print(f"[*] Connection from {addr[0]}:{addr[1]}")
             threading.Thread(
                 target=handle_connection,
-                args=(client, key, args.data_dir, args.host_yaml, args.second_host),
+                args=(
+                    client, key, args.data_dir, args.host_yaml, args.second_host,
+                    graph, graph_lock,
+                ),
                 daemon=True,
             ).start()
     except KeyboardInterrupt:

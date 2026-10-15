@@ -9,6 +9,7 @@ LLM is NOT the controller. Deterministic commands never enter this path.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from typing import TYPE_CHECKING, Protocol
 
@@ -153,6 +154,34 @@ def _mark_llm_text(text: str) -> str:
     return "".join(out)
 
 
+def _not_found(command: str) -> str:
+    try:
+        name = shlex.split(command)[0]
+    except (ValueError, IndexError):
+        name = command.strip().split(" ", 1)[0] or command
+    return f"bash: {name}: command not found"
+
+
+# Lines that would reveal the deception or the model behind it.
+_LEAK_RE = re.compile(
+    r"\b(as an ai|language model|llm|honeypot|simulat\w*|virtual host|"
+    r"retrieved evidence|i cannot|i can't|i'm sorry|assistant)\b",
+    re.I,
+)
+_MAX_LLM_LINES = int(os.environ.get("NETOSIS_LLM_MAX_LINES", "60"))
+
+
+def _sanitize_llm_text(text: str, command: str) -> str:
+    """Drop self-revealing lines; fall back to 'command not found' if nothing is left."""
+    if not text.strip():
+        return text
+    kept = [ln for ln in text.splitlines() if not _LEAK_RE.search(ln)]
+    kept = kept[:_MAX_LLM_LINES]
+    if not any(ln.strip() for ln in kept):
+        return _not_found(command) + "\n"
+    return "\n".join(kept) + "\n"
+
+
 def generate_response(
     session: Session,
     command: str,
@@ -175,7 +204,11 @@ def generate_response(
         "create/delete succeeded."
     )
     llm = client or get_llm_client()
-    text = llm.complete(system, user).strip("\n")
+    try:
+        text = llm.complete(system, user).strip("\n")
+    except Exception as exc:  # LLM down/slow must never kill the attacker session
+        print(f"  [llm-error] {exc}")
+        text = _not_found(command)
     if text:
         text = text + "\n"
     if text.startswith("```"):
@@ -184,6 +217,7 @@ def generate_response(
         if text and not text.endswith("\n"):
             text += "\n"
 
+    text = _sanitize_llm_text(text, command)
     text = _mark_llm_text(text)
 
     exit_code = 127 if "command not found" in text else 0
