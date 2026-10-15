@@ -4,6 +4,7 @@ import shlex
 from dataclasses import dataclass
 
 from deception.runtime.host import Session, VirtualHost
+from deception.command_engine.binaries import is_plausible_command
 from deception.llm.fallback import generate_response
 
 
@@ -518,4 +519,8 @@ def execute(session: Session, line: str) -> CommandResult:
             command=line,
         )
 
+    if not is_plausible_command(cmd):
+        return CommandResult(
+            stdout="", stderr=f"bash: {cmd}: command not found\n", exit_code=127, command=line
+        )
     return generate_response(session, line)

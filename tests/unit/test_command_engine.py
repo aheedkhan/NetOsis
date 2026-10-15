@@ -51,9 +51,9 @@ def test_cd_and_pwd(session: Session) -> None:
     assert "Corp Intranet" in r.stdout
 
 
-def test_unknown_command_uses_llm_fallback(session: Session) -> None:
+def test_unknown_command_answers_instantly(session: Session) -> None:
     r = execute(session, "zzznonsense_cmd_99")
-    assert r.llm_fallback is True
+    assert r.llm_fallback is False
     assert r.exit_code == 127
     assert "command not found" in (r.stdout + r.stderr)
 

@@ -188,9 +188,21 @@ def generate_response(
     retrieved_context: str | None = None,
     *,
     client: LlmClient | None = None,
+    cacheable: bool = True,
 ) -> CommandResult:
-    """Generate shell-like output from Qwen/mock using retrieved virtual FS context."""
+    """Generate shell-like output from Qwen/mock using retrieved virtual FS context.
+
+    Cached answers (same host/user/command) are returned instantly; only
+    successful, non-mutation answers are stored.
+    """
     from deception.command_engine.engine import CommandResult
+    from deception.llm.cache import cache_key, get_cache
+
+    cache = get_cache() if cacheable else None
+    key = cache_key(session, command)
+    cached = cache.get(key) if cache else None
+    if cached is not None:
+        return _finish(cached, command)
 
     context = retrieved_context if retrieved_context is not None else retrieve_context(
         session, command
@@ -204,11 +216,13 @@ def generate_response(
         "create/delete succeeded."
     )
     llm = client or get_llm_client()
+    llm_ok = True
     try:
         text = llm.complete(system, user).strip("\n")
     except Exception as exc:  # LLM down/slow must never kill the attacker session
         print(f"  [llm-error] {exc}")
         text = _not_found(command)
+        llm_ok = False
     if text:
         text = text + "\n"
     if text.startswith("```"):
@@ -218,6 +232,14 @@ def generate_response(
             text += "\n"
 
     text = _sanitize_llm_text(text, command)
+    if cache is not None and llm_ok:
+        cache.put(key, text)
+    return _finish(text, command)
+
+
+def _finish(text: str, command: str) -> CommandResult:
+    from deception.command_engine.engine import CommandResult
+
     text = _mark_llm_text(text)
 
     exit_code = 127 if "command not found" in text else 0
@@ -245,7 +267,8 @@ def narrate_after_mutation(
 ) -> CommandResult:
     """FS already mutated deterministically — LLM prints grounded shell output only."""
     ctx = retrieve_context(session, command, include_mutation_authority=True)
-    return generate_response(session, command, ctx, client=client)
+    # Output depends on what this attacker just changed — never cache it.
+    return generate_response(session, command, ctx, client=client, cacheable=False)
 
 
 # Compat helpers used by older tests

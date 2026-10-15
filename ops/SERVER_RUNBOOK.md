@@ -46,6 +46,17 @@ ssh admin@127.0.0.1 -p 2222        # password admin123 — try: ls, cat notes.tx
 journalctl -u netosis-ssh -f       # [det]/[llm] lines per command
 ```
 
+### 2b. Pre-generate answers with the big model (runs ~1 h, in background)
+
+Live answers use `qwen2.5:0.5b` (~6 s on this CPU). Common commands are
+pre-generated once by `qwen2.5:3b` so attackers get them instantly:
+
+```bash
+cd /opt/netosis
+nohup .venv/bin/python scripts/llm_prewarm.py --model qwen2.5:3b > data/prewarm.log 2>&1 &
+tail -f data/prewarm.log          # Ctrl-C only stops tail; job keeps running
+```
+
 Same later for **CT104** (`finance-db-01`) and **CT105** (`ops-app-01`).
 Update after a push: `cd /opt/netosis && git pull && bash scripts/lab-bootstrap-remote.sh ent-web-01`.
 

@@ -49,15 +49,57 @@ def test_generate_response_accepts_retrieved_context() -> None:
     assert "[llm]" in result.stdout
 
 
-def test_unknown_command_marked_as_llm() -> None:
+def test_junk_command_skips_llm() -> None:
     from deception.command_engine.engine import execute
 
     session = Session(host=VirtualHost.load(HOST), session_id="t")
     r = execute(session, "zzznonsense_cmd_99")
+    assert r.llm_fallback is False
+    assert r.exit_code == 127
+    assert r.stderr == "bash: zzznonsense_cmd_99: command not found\n"
+
+
+def test_real_binary_goes_to_llm_and_is_marked() -> None:
+    from deception.command_engine.engine import execute
+
+    session = Session(host=VirtualHost.load(HOST), session_id="t")
+    r = execute(session, "uptime")
     assert r.llm_fallback is True
-    blob = r.stdout + r.stderr
-    assert "[llm]" in blob
-    assert "command not found" in blob
+    assert "[llm]" in r.stdout
+
+
+class _CountingClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        self.calls += 1
+        return f"Filesystem output #{self.calls}"
+
+
+def test_cache_returns_identical_answer_without_llm(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NETOSIS_LLM_CACHE", "1")
+    monkeypatch.setenv("NETOSIS_DATA_DIR", str(tmp_path))
+    session = Session(host=VirtualHost.load(HOST), session_id="t")
+    client = _CountingClient()
+    first = generate_response(session, "df -h", "", client=client)
+    second = generate_response(session, "df  -h", "", client=client)
+    assert first.stdout == second.stdout
+    assert client.calls == 1
+    assert (tmp_path / "llm_cache.json").is_file()
+
+
+def test_llm_error_is_not_cached(tmp_path, monkeypatch) -> None:
+    class _Down:
+        def complete(self, system_prompt: str, user_prompt: str) -> str:
+            raise RuntimeError("LLM unreachable")
+
+    monkeypatch.setenv("NETOSIS_LLM_CACHE", "1")
+    monkeypatch.setenv("NETOSIS_DATA_DIR", str(tmp_path))
+    session = Session(host=VirtualHost.load(HOST), session_id="t")
+    r = generate_response(session, "df -h", "", client=_Down())
+    assert "command not found" in r.stderr
+    assert not (tmp_path / "llm_cache.json").exists()
 
 
 def test_sudo_elevates_and_id_shows_root() -> None:
