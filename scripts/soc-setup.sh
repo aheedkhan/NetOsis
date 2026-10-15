@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run ON the SOC controller VM103 (192.168.40.10) as root.
+# Run ON the SOC controller VM103 (192.168.40.31) as root.
 # Installs Ollama, exposes it on :11434 for the honeypots, pulls candidate models.
 #
 #   git clone https://github.com/aheedkhan/NetOsis.git /opt/netosis

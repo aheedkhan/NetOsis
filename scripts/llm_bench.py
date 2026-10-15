@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark Ollama models for honeypot latency (stdlib only).
 
-Run on VM103, or from a honeypot CT with --url http://192.168.40.10:11434.
+Run on VM103, or from a honeypot CT with --url http://192.168.40.31:11434.
 Pick the largest model whose p95 stays under ~4 s.
 """
 

@@ -10,7 +10,7 @@ Jbox (VM100) = lab/FW management only.
 | ent-web-01 | CT102 | 192.168.30.10 | Public-facing SSH HHP (`:2222`, WAN `:22` NAT) |
 | finance-db-01 | CT104 | 192.168.10.10 | FIN HHP (reached only by lateral movement) |
 | ops-srv-01 | CT105 | 192.168.20.10 | OPS HHP (reached only by lateral movement) |
-| CyberSnare-Controller | VM103 | 192.168.40.10 | Ollama, telemetry collector, sandbox API, k3s |
+| CyberSnare-Controller | VM103 | 192.168.40.31 | Ollama, telemetry collector, sandbox API, k3s |
 
 `U` = you on Proxmox/OPNsense, `C` = code in this repo.
 
@@ -39,7 +39,7 @@ Jbox (VM100) = lab/FW management only.
   → pick the largest with p95 < ~4 s for 128 tokens.
 - U: `scripts/deploy_to_lab.sh` → CT102 `/opt/netosis`, `.env` from
   `deception/hosts/ent-web-01.ssh.env`, enable `netosis-ssh`.
-- U: CT102 Proxmox FW: IN allow `tcp/2222`; OUT allow `192.168.40.10:11434,8000`;
+- U: CT102 Proxmox FW: IN allow `tcp/2222`; OUT allow `192.168.40.31:11434,8000`;
   OUT drop everything else (incl. Internet and `192.168.1.0/24`). Same pattern on 104/105.
 - Done when: from Jbox `ssh admin@192.168.30.10 -p 2222` works and unknown commands
   are answered by Qwen.
@@ -83,7 +83,7 @@ unreachable and unused.
 - C: sandbox API on VM103 `:8000`: `POST /fetch` — download URL in a throw-away k3s
   **Job** (no network except egress proxy, read-only rootfs, 60 s TTL), return
   sha256 / size / file type / YARA hits. **No detonation** of binaries.
-- C: CT102 `.env`: `NETOSIS_SANDBOX_URL=http://192.168.40.10:8000`.
+- C: CT102 `.env`: `NETOSIS_SANDBOX_URL=http://192.168.40.31:8000`.
 - Viva line: k8s is orchestration for disposable jobs, not the security boundary —
   the boundary is VM103 + FW rules.
 

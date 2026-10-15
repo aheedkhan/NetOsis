@@ -25,7 +25,7 @@ policy_in: ACCEPT
 policy_out: ACCEPT
 ```
 
-## 1. SOC controller — VM103 (192.168.40.10)
+## 1. SOC controller — VM103 (192.168.40.31, Ubuntu 26.04, user `controller` → use `sudo -i` first)
 
 ```bash
 git clone https://github.com/aheedkhan/NetOsis.git /opt/netosis
@@ -65,8 +65,8 @@ policy_out: DROP
 
 [RULES]
 IN ACCEPT -p tcp -dport 2222 -log nolog
-OUT ACCEPT -d 192.168.40.10 -p tcp -dport 11434 -log nolog
-OUT ACCEPT -d 192.168.40.10 -p tcp -dport 8000 -log nolog
+OUT ACCEPT -d 192.168.40.31 -p tcp -dport 11434 -log nolog
+OUT ACCEPT -d 192.168.40.31 -p tcp -dport 8000 -log nolog
 ```
 
 Need apt/git on a honeypot again? set `enable: 0`, do the work, set `enable: 1`.
@@ -107,7 +107,7 @@ Check: `pve-firewall status` → `enabled/running`.
    otherwise drop every Kali packet.
 3. **Firewall → Rules → ENTERPRISE_VLAN30 / FINANCE_VLAN10 / OPERATIONS_VLAN20**
    (top to bottom):
-   - Pass TCP `<honeypot .10>` → `192.168.40.10` ports `11434`, `8000`
+   - Pass TCP `<honeypot .10>` → `192.168.40.31` ports `11434`, `8000`
    - Block any → `192.168.0.0/16` (other VLANs, LAN, Jbox leg)
    - Block any → `172.16.0.0/12`, `10.0.0.0/8`
    - Internet: keep a pass-any rule only while installing; then delete it.
