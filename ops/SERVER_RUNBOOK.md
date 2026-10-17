@@ -64,6 +64,33 @@ If the service fails with `status=226/NAMESPACE` (unprivileged LXC), comment out
 `PrivateTmp`/`ProtectSystem`/`ProtectHome` in `/etc/systemd/system/netosis-ssh.service`,
 then `systemctl daemon-reload && systemctl restart netosis-ssh`.
 
+## 2c. Real servers (the assets honeypots must never reach)
+
+Proxmox host shell — reuse the Ubuntu CT template the honeypots were made from:
+
+```bash
+pveam list local                     # copy the vztmpl name, e.g. local:vztmpl/ubuntu-24.04-standard_...
+T=local:vztmpl/<template-name>
+pct create 310 $T --hostname ent-web-real-01 --cores 1 --memory 1024 --rootfs local-lvm:8 \
+  --net0 name=eth0,bridge=vmbr1,tag=30,ip=192.168.30.40/24,gw=192.168.30.254,firewall=1 \
+  --unprivileged 1 --features nesting=1 --onboot 1 --start 1
+pct create 110 $T --hostname finance-db-real-01 --cores 1 --memory 1024 --rootfs local-lvm:8 \
+  --net0 name=eth0,bridge=vmbr1,tag=10,ip=192.168.10.50/24,gw=192.168.10.254,firewall=1 \
+  --unprivileged 1 --features nesting=1 --onboot 1 --start 1
+pct create 210 $T --hostname ops-app-real-01 --cores 1 --memory 1024 --rootfs local-lvm:8 \
+  --net0 name=eth0,bridge=vmbr1,tag=20,ip=192.168.20.50/24,gw=192.168.20.254,firewall=1 \
+  --unprivileged 1 --features nesting=1 --onboot 1 --start 1
+```
+
+Inside each (`pct enter 310|110|210`):
+
+```bash
+apt-get update -qq && apt-get install -y -qq curl
+curl -fsSL https://raw.githubusercontent.com/aheedkhan/NetOsis/main/scripts/real-server-setup.sh | bash -s web   # 310
+#                                                                                         ... bash -s db    # 110
+#                                                                                         ... bash -s app   # 210
+```
+
 ## 3. Lock down (after step 1–2 work)
 
 `/etc/pve/firewall/102.fw` (copy to `104.fw`, `105.fw`):
