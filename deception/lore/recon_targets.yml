@@ -1,3 +1,9 @@
+# SUPERSEDED by deception/lore/topology.yml + deception/network/theater.py,
+# which now drive `nmap`/`ping`/`ssh`/etc. Kept only because deception/llm/
+# fake_shell.py:visible_targets() still parses it; not written into new entries.
+# NEVER list a real (non-honeypot) asset IP here — a real 192.168.30.40 entry
+# was removed for exactly that reason.
+#
 # Fake recon targets for nmap theater (no real scanning).
 # Day-0 inside WEB-HP: show real web neighbor open; admin filtered; other VLANs filtered.
 # FIN/OPS HPs appear under when_exposed after policy.
@@ -13,11 +19,6 @@ always_visible:
     ports:
       - { port: 22, state: open, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10" }
       - { port: 80, state: open, service: http, version: "nginx 1.18.0" }
-  - ip: "192.168.30.40"
-    hostname: "ent-web-real.corp.local"
-    ports:
-      - { port: 80, state: open, service: http, version: "nginx 1.18.0" }
-      - { port: 443, state: open, service: https, version: "nginx 1.18.0" }
   - ip: "192.168.30.31"
     hostname: "ent-jump-01.corp.local"
     ports: []

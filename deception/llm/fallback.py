@@ -115,7 +115,7 @@ def _system_prompt(retrieved_context: str) -> str:
 
 def get_llm_client() -> LlmClient:
     mode = os.environ.get("NETOSIS_LLM_MODE", "mock").lower()
-    if mode in {"http", "qwen", "nim", "openai", "ollama"}:
+    if mode in {"http", "qwen", "openai", "ollama"}:
         from deception.llm.openai_client import OpenAICompatibleClient
 
         return OpenAICompatibleClient()

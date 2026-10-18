@@ -14,7 +14,9 @@ Example:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import select
 import socket
 import sys
 import threading
@@ -29,6 +31,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from attack_graph.model.graph import AttackGraph
+from controller.client import wake_ctid
+from controller.shipper import ShippingTelemetryStore, get_shipper
 from deception.runtime.host import Session, VirtualHost
 from deception.runtime.pipeline import VerticalSlicePipeline
 from telemetry.schema.events import TelemetryEvent, utc_now_iso
@@ -135,14 +139,199 @@ def _run_safely(pipeline: VerticalSlicePipeline, cmd: str, peer_ip: str):
     except Exception as exc:
         print(f"  [error] {peer_ip} cmd={cmd!r}: {exc!r}")
         name = cmd.split(" ", 1)[0]
-        return f"bash: {name}: command not found\n", 127
+        return f"bash: {name}: command not found\n", 127, None
     out = (result.stdout or "") + (result.stderr or "")
     tag = "llm" if getattr(result, "llm_fallback", False) else "det"
     print(
         f"  [{tag}] {peer_ip} cmd={cmd!r} action={decision.action} "
         f"tech={event.technique} score={decision.risk_score}"
     )
-    return out, result.exit_code
+    return out, result.exit_code, getattr(result, "pivot_target", None)
+
+
+def _ctid_for(ip: str) -> int | None:
+    """This sensor's Proxmox CTID, from the shared topology (None if unknown)."""
+    try:
+        from deception.network.theater import load_topology
+
+        host = load_topology().hosts.get(ip)
+        return host.ctid if host else None
+    except Exception:
+        return None
+
+
+def _read_line(channel, prompt_text: str, *, echo: bool = True) -> str | None:
+    """One line of raw input over the channel; None on disconnect/Ctrl-C."""
+    channel.send(prompt_text)
+    buf = ""
+    while True:
+        try:
+            raw = channel.recv(1)
+        except OSError:
+            return None
+        if not raw:
+            return None
+        char = raw.decode("utf-8", errors="ignore")
+        if char in ("\r", "\n"):
+            channel.send("\r\n")
+            return buf
+        if char == "\x03":
+            channel.send("^C\r\n")
+            return None
+        if char in {"\x7f", "\b"}:
+            if buf:
+                buf = buf[:-1]
+                if echo:
+                    channel.send("\b \b")
+            continue
+        if ord(char) >= 32:
+            buf += char
+            if echo:
+                channel.send(char)
+
+
+def _pump(local_channel, remote_channel) -> None:
+    """Bidirectional raw byte relay once the real second-hop session is up."""
+    while True:
+        try:
+            r, _w, _x = select.select([local_channel, remote_channel], [], [], 1.0)
+        except OSError:
+            return
+        if local_channel in r:
+            try:
+                data = local_channel.recv(4096)
+            except OSError:
+                return
+            if not data:
+                return
+            remote_channel.send(data)
+        if remote_channel in r:
+            try:
+                data = remote_channel.recv(4096)
+            except OSError:
+                return
+            if not data:
+                return
+            local_channel.send(data)
+
+
+def _log_lateral_movement(
+    pipeline: VerticalSlicePipeline,
+    graph: AttackGraph,
+    graph_lock: threading.Lock,
+    graph_path: Path,
+    peer_ip: str,
+    target_hostname: str,
+    target_ip: str,
+    user: str,
+) -> None:
+    session = pipeline.session
+    event = TelemetryEvent(
+        timestamp=utc_now_iso(),
+        session_id=session.session_id,
+        actor_id=session.actor_id,
+        source_ip=peer_ip,
+        target_host=target_hostname,
+        target_ip=target_ip,
+        event_type="lateral_movement",
+        command=f"ssh {user}@{target_ip}",
+        result="",
+        technique="T1021.004",
+        technique_name="Remote Services: SSH",
+        technique_confidence=0.9,
+        behavior="ssh_pivot",
+        extra={"risk_category": "Lateral_movement", "from_host": session.host.hostname},
+    )
+    pipeline.store.append(event)
+    with graph_lock:
+        actor = f"actor:{session.actor_id}"
+        host_node = f"host:{target_hostname}"
+        graph.add_node(host_node, type="HOST", ip=target_ip, hostname=target_hostname, visible=True)
+        graph.add_edge(actor, host_node, "lateral_movement", via="ssh_pivot")
+        graph.save(graph_path)
+
+
+def _handle_pivot(
+    channel,
+    pivot: dict,
+    peer_ip: str,
+    pipeline: VerticalSlicePipeline,
+    graph: AttackGraph,
+    graph_lock: threading.Lock,
+    graph_path: Path,
+) -> None:
+    """Real second-hop relay: attacker's bytes go to an actual SSH client
+    dialed out to the other honeypot's real sensor — that sensor's own
+    check_auth_password() decides success/failure, same as real lateral
+    movement. If the target CT is powered off (saving power), wake it via
+    the controller first and retry before giving up."""
+    ip = pivot["ip"]
+    port = int(pivot.get("port", 2222))
+    hostname = pivot.get("hostname", ip)
+    ctid = pivot.get("ctid")
+    user = pivot.get("requested_user") or pipeline.session.user
+
+    def _tcp_up() -> bool:
+        try:
+            with socket.create_connection((ip, port), timeout=1.5):
+                return True
+        except OSError:
+            return False
+
+    if not _tcp_up():
+        if not ctid:
+            channel.send(f"ssh: connect to host {ip} port 22: No route to host\r\n")
+            return
+        print(f"  [pivot] {peer_ip} -> {hostname} ({ip}) ctid={ctid} offline — waking")
+        woke = wake_ctid(ctid)
+        if not woke or not _tcp_up():
+            channel.send(f"ssh: connect to host {ip} port 22: Connection timed out\r\n")
+            return
+
+    fingerprint = hashlib.sha256(f"{hostname}{ip}".encode()).hexdigest()[:47]
+    answer = _read_line(
+        channel,
+        f"The authenticity of host '{hostname} ({ip})' can't be established.\r\n"
+        f"ED25519 key fingerprint is SHA256:{fingerprint}.\r\n"
+        "Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
+    )
+    if answer is None or answer.strip().lower() not in {"yes", "y"}:
+        channel.send("Host key verification failed.\r\n")
+        return
+
+    client: paramiko.SSHClient | None = None
+    for _attempt in range(3):
+        password = _read_line(channel, f"{user}@{ip}'s password: ", echo=False)
+        if password is None:
+            return
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                ip, port=port, username=user, password=password,
+                timeout=10, banner_timeout=10, auth_timeout=10,
+                look_for_keys=False, allow_agent=False,
+            )
+            break
+        except paramiko.AuthenticationException:
+            channel.send("Permission denied, please try again.\r\n")
+            client = None
+            continue
+        except (paramiko.SSHException, OSError) as exc:
+            print(f"  [pivot-error] {peer_ip} -> {hostname}: {exc!r}")
+            channel.send(f"ssh: connect to host {ip} port {port}: Connection refused\r\n")
+            return
+    if client is None:
+        channel.send(f"{user}@{ip}: Permission denied (publickey,password).\r\n")
+        return
+
+    print(f"  [pivot] {peer_ip} -> {hostname} ({ip}) as {user!r} — relaying")
+    _log_lateral_movement(pipeline, graph, graph_lock, graph_path, peer_ip, hostname, ip, user)
+    try:
+        remote = client.invoke_shell(term="xterm")
+        _pump(channel, remote)
+    finally:
+        client.close()
 
 
 def handle_connection(
@@ -159,9 +348,10 @@ def handle_connection(
     except OSError:
         peer_ip = "0.0.0.0"
 
-    store = JsonlTelemetryStore(data_dir / "telemetry.jsonl")
     graph_path = data_dir / "attack_graph.json"
     vhost = VirtualHost.load(host_yaml)
+    shipper = get_shipper(vhost.hostname, vhost.ip, _ctid_for(vhost.ip))
+    store = ShippingTelemetryStore(data_dir / "telemetry.jsonl", shipper)
 
     transport = paramiko.Transport(client_sock)
     # Believable OpenSSH banner for nmap -sV / banner grab (not LLM).
@@ -206,10 +396,25 @@ def handle_connection(
     def save_graph() -> None:
         with graph_lock:
             graph.save(graph_path)
+        if shipper is not None:
+            shipper.state(
+                session.actor_id,
+                lambda: pipeline.profile.summary(),
+                lambda: graph.to_dict(),
+            )
+
+    if shipper is not None:
+        shipper.session_opened()
 
     if server.exec_command is not None:
         try:
-            out, code = _run_safely(pipeline, server.exec_command, peer_ip)
+            out, code, pivot = _run_safely(pipeline, server.exec_command, peer_ip)
+            if pivot:
+                # Non-interactive `ssh host 'cmd'` pivoting needs a password
+                # prompt over a channel bots using this form never read from —
+                # match real OpenSSH's behavior with no interactive tty.
+                out = "Pseudo-terminal will not be allocated because stdin is not a terminal.\n"
+                code = 255
             if out:
                 channel.sendall(out)
             channel.send_exit_status(code)
@@ -217,6 +422,8 @@ def handle_connection(
         except OSError:
             pass
         finally:
+            if shipper is not None:
+                shipper.session_closed()
             channel.close()
             transport.close()
         return
@@ -258,8 +465,10 @@ def handle_connection(
                     channel.send("logout\r\n")
                     break
                 if cmd:
-                    out, _code = _run_safely(pipeline, cmd, peer_ip)
-                    if out:
+                    out, _code, pivot = _run_safely(pipeline, cmd, peer_ip)
+                    if pivot:
+                        _handle_pivot(channel, pivot, peer_ip, pipeline, graph, graph_lock, graph_path)
+                    elif out:
                         channel.send(out.replace("\n", "\r\n"))
                     save_graph()
                 channel.send(prompt())
@@ -277,6 +486,8 @@ def handle_connection(
                 buf += char
                 channel.send(char)
     finally:
+        if shipper is not None:
+            shipper.session_closed()
         try:
             channel.close()
         except Exception:

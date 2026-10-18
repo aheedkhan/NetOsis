@@ -36,12 +36,47 @@ python3 /opt/netosis/scripts/llm_bench.py       # choose model (p95 < ~4 s)
 Write the chosen model into every `deception/hosts/*.ssh.env`
 (`NETOSIS_LLM_MODEL=...`), commit + push, or edit `/opt/netosis/.env` on each CT.
 
+### 1b. Controller service (power-saves CT104/CT105 + real lateral-movement relay)
+
+The controller is the only thing allowed to power-cycle a honeypot CT — never the
+CTs themselves. It needs a **restricted** Proxmox API token, not root:
+
+```bash
+# on the Proxmox host
+pveum user add netosis-ctl@pve
+pveum aclmod /nodes/vhos/lxc/102 -user netosis-ctl@pve -role PVEVMAdmin
+pveum aclmod /nodes/vhos/lxc/104 -user netosis-ctl@pve -role PVEVMAdmin
+pveum aclmod /nodes/vhos/lxc/105 -user netosis-ctl@pve -role PVEVMAdmin
+pveum user token add netosis-ctl@pve ctl --privsep 0    # copy the printed secret
+```
+
+> **Open question — confirm before relying on auto-wake:** VM103 sits on VLAN40
+> behind OPNsense; the Proxmox API is on the *management* network
+> `172.30.226.7:8006` (vmbr0 untagged), a separate L2 segment. Does OPNsense
+> currently route/NAT VLAN40 → that management subnet at all? If not, auto-wake
+> will time out (harmless — the pivot just shows "Connection timed out" — but
+> it won't actually start the CT) until that path exists, e.g. a narrow
+> OPNsense rule/NAT for VM103 → `172.30.226.7:8006` only.
+
+On VM103 (installs the service, generates the ingest token, serves the dashboard):
+
+```bash
+cd /opt/netosis && git pull && bash scripts/soc-dashboard-setup.sh
+# edit /opt/netosis/controller/.env: fill PROXMOX_TOKEN_ID / PROXMOX_TOKEN_SECRET
+# (the secret printed by `pveum user token add` above), then:
+systemctl restart netosis-controller
+curl -s 192.168.40.31:8000/healthz   # {"ok": true}
+```
+
+The script prints the dashboard URL (`http://192.168.40.31:8000/`, open it from the Jbox) and
+the token. Give the token to every honeypot (steps 2 below), see `docs/soc-dashboard.md`.
+
 ## 2. Enterprise honeypot — CT102 (192.168.30.10)
 
 ```bash
 pct enter 102
 git clone https://github.com/aheedkhan/NetOsis.git /opt/netosis
-bash /opt/netosis/scripts/lab-bootstrap-remote.sh ent-web-01
+NETOSIS_INGEST_TOKEN=<token from soc-dashboard-setup.sh> bash /opt/netosis/scripts/lab-bootstrap-remote.sh ent-web-01
 ssh admin@127.0.0.1 -p 2222        # password admin123 — try: ls, cat notes.txt, df -h
 journalctl -u netosis-ssh -f       # [det]/[llm] lines per command
 ```
@@ -105,6 +140,10 @@ policy_out: DROP
 IN ACCEPT -p tcp -dport 2222 -log nolog
 OUT ACCEPT -d 192.168.40.31 -p tcp -dport 11434 -log nolog
 OUT ACCEPT -d 192.168.40.31 -p tcp -dport 8000 -log nolog
+# Lateral-movement relay: this honeypot dials OUT to the other two honeypots'
+# real sensors on :2222 when an attacker's `ssh` pivot is accepted. Safe to
+# list all three IPs on every copy (a CT never routes to its own IP this way).
+OUT ACCEPT -d 192.168.10.10,192.168.20.10,192.168.30.10 -p tcp -dport 2222 -log nolog
 ```
 
 Need apt/git on a honeypot again? set `enable: 0`, do the work, set `enable: 1`.
@@ -120,6 +159,11 @@ policy_out: ACCEPT
 [RULES]
 IN ACCEPT -source 192.168.10.10,192.168.20.10,192.168.30.10 -p tcp -dport 11434 -log nolog
 IN ACCEPT -source 192.168.10.10,192.168.20.10,192.168.30.10 -p tcp -dport 8000 -log nolog
+# Dashboard for analysts: only the Jbox LAN leg (the dashboard API is read-only but unauthenticated).
+IN ACCEPT -source 192.168.1.10 -p tcp -dport 8000 -log nolog
+# Controller -> Proxmox API, for auto-wake (see step 1b's open question —
+# only add this once VLAN40 -> 172.30.226.0/24 is actually routed/NAT'd).
+OUT ACCEPT -d 172.30.226.7 -p tcp -dport 8006 -log nolog
 ```
 
 `/etc/pve/firewall/106.fw` (Kali sees only the FW WAN — not the Jbox):
@@ -146,12 +190,22 @@ Check: `pve-firewall status` → `enabled/running`.
 3. **Firewall → Rules → ENTERPRISE_VLAN30 / FINANCE_VLAN10 / OPERATIONS_VLAN20**
    (top to bottom):
    - Pass TCP `<honeypot .10>` → `192.168.40.31` ports `11434`, `8000`
+   - Pass TCP `<honeypot .10>` → `192.168.10.10,192.168.20.10,192.168.30.10` port
+     `2222` (lateral-movement relay — must come *before* the block-other-VLANs
+     rule below, or the pivot will always "No route to host")
    - Block any → `192.168.0.0/16` (other VLANs, LAN, Jbox leg)
    - Block any → `172.16.0.0/12`, `10.0.0.0/8`
    - Internet: keep a pass-any rule only while installing; then delete it.
-4. **Firewall → NAT → Port Forward**: Interface WAN, TCP, destination *WAN address*
-   port `22` → redirect `192.168.30.10` port `2222`, filter rule = *Add associated
-   filter rule*. Apply.
+4. **Firewall → NAT → Destination NAT** (was "Port Forward"): Interface WAN, TCP,
+   destination *WAN address* port `22` → redirect `192.168.30.10` port `2222`,
+   **Firewall rule = Manual**, then **Firewall → Rules → WAN**: pass TCP any →
+   `192.168.30.10` port `2222` (rules match the post-NAT address), log on.
+   **Firewall → Settings → Advanced → tick Disable reply-to**, Save, Rules → Apply.
+   Why: WAN filter rules get **reply-to WAN_GW** by default, so the SYN-ACK to
+   Kali is sent to `172.30.227.254` instead of straight back on-link, and the
+   handshake hangs (log says "pass", ssh times out). Alternative: Firewall rule =
+   *Pass* (pf `rdr pass` skips filter rules, so no reply-to, but no WAN rule to
+   log/count).
 
 ## 5. Verify from Kali
 

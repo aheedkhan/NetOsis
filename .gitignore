@@ -13,6 +13,7 @@ __pycache__/
 *.egg-info/
 .eggs/
 dist/
+!soc/dist/
 build/
 .venv/
 venv/
@@ -43,3 +44,15 @@ ssh_host_rsa_key
 # Coverage
 .coverage
 htmlcov/
+
+# Dashboard build tooling (the built soc/dist IS committed so the SOC VM needs no Node)
+soc/node_modules/
+
+# Design skills installed with `npx skills add` / `uipro-cli init` (local tooling, not project code)
+.agents/
+.claude/
+skills-lock.json
+.taste-skill/
+
+# TypeScript incremental build cache
+soc/tsconfig.tsbuildinfo

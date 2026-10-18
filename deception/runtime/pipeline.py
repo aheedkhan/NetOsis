@@ -176,6 +176,33 @@ class VerticalSlicePipeline:
             self._record_action_on_graph(decision.action, result_meta)
             if decision.action == "D01" and result_meta.get("exposed_host") is not None:
                 self.exposed_host = result_meta["exposed_host"]
+            # Record the deception response as its own telemetry event so the SOC
+            # can show which rung fired, when, for whom and why (not in self.events,
+            # which feeds the risk score).
+            self.store.append(
+                TelemetryEvent(
+                    timestamp=utc_now_iso(),
+                    session_id=self.session.session_id,
+                    actor_id=self.session.actor_id,
+                    source_ip=self.session.source_ip,
+                    target_host=self.session.host.hostname,
+                    target_ip=self.session.host.ip,
+                    event_type="deception_action",
+                    command=result.command or line.strip(),
+                    result="",
+                    extra={
+                        "action": decision.action,
+                        "name": decision.action_name,
+                        "reason": decision.reason,
+                        "risk_score": decision.risk_score,
+                        "level": decision.level,
+                        "detail": {
+                            k: v for k, v in result_meta.items()
+                            if k in {"hostname", "ip", "path", "artifact_id", "service"} and v is not None
+                        },
+                    },
+                )
+            )
 
         self.profile.observe(
             payload,

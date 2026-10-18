@@ -34,9 +34,9 @@ mappings:
     risk_category: Discovery
   - behavior: create_or_modify_file
     commands: [mkdir, touch]
-    technique: T1036
-    technique_name: Masquerading
-    confidence: 0.55
+    technique: T1074.001
+    technique_name: "Data Staged: Local Data Staging"
+    confidence: 0.4
     risk_category: FS_create
   - behavior: indicator_removal_file_deletion
     commands: [rm, rmdir]
@@ -56,3 +56,123 @@ mappings:
     technique_name: Network Service Discovery
     confidence: 0.8
     risk_category: Discovery
+
+# ---------------------------------------------------------------------------
+# Argument-aware entries. `patterns` are regexes over the WHOLE line and are
+# tried before the plain command-word entries above/below, so
+# `cat /etc/shadow` is credential access while `cat notes.txt` stays Collection.
+# ---------------------------------------------------------------------------
+  - behavior: os_credential_dumping_shadow
+    patterns: ['(^|[\s/])etc/shadow', 'unshadow']
+    technique: T1003.008
+    technique_name: "OS Credential Dumping: /etc/passwd and /etc/shadow"
+    confidence: 0.9
+    risk_category: Credential_attack
+  - behavior: credentials_in_files
+    patterns: ['id_(rsa|ed25519|ecdsa)\b', '\.pgpass', '\.env\b', 'credentials', 'passwords?\.(txt|csv|xlsx?)', 'db\.url', 'shadow\.bak', 'wp-config']
+    technique: T1552.001
+    technique_name: "Unsecured Credentials: Credentials In Files"
+    confidence: 0.8
+    risk_category: Credential_attack
+  - behavior: bash_history_access
+    patterns: ['\.bash_history', '^\s*history\b']
+    technique: T1552.003
+    technique_name: "Unsecured Credentials: Bash History"
+    confidence: 0.75
+    risk_category: Credential_attack
+  - behavior: account_discovery
+    patterns: ['etc/passwd', 'etc/group', '^\s*(getent\s+passwd|lastlog|last|lastb)\b']
+    technique: T1087.001
+    technique_name: "Account Discovery: Local Account"
+    confidence: 0.8
+    risk_category: Discovery
+  - behavior: ssh_lateral_movement
+    patterns: ['^\s*(sudo\s+)?ssh\s+\S+@?\S+', '^\s*scp\s']
+    technique: T1021.004
+    technique_name: "Remote Services: SSH"
+    confidence: 0.85
+    risk_category: Lateral_movement
+  - behavior: persistence_cron
+    patterns: ['crontab\s+(-e|-r|[^\s-])', 'etc/cron', 'systemctl\s+(enable|start)\s']
+    technique: T1053.003
+    technique_name: "Scheduled Task/Job: Cron"
+    confidence: 0.7
+    risk_category: Persistence
+  - behavior: ssh_authorized_keys
+    patterns: ['authorized_keys']
+    technique: T1098.004
+    technique_name: "Account Manipulation: SSH Authorized Keys"
+    confidence: 0.9
+    risk_category: Persistence
+  - behavior: suid_enumeration
+    patterns: ['find\s.*-perm\s+[-/]?(4000|u=s|2000)', 'getcap']
+    technique: T1548.001
+    technique_name: "Abuse Elevation Control Mechanism: Setuid and Setgid"
+    confidence: 0.8
+    risk_category: Discovery
+  - behavior: log_clearing
+    patterns: ['rm\s.*(/var/log|\.bash_history)', '>\s*/var/log', 'history\s+-c', 'unset\s+HISTFILE', 'shred\s']
+    technique: T1070.002
+    technique_name: "Indicator Removal: Clear Linux or Mac System Logs"
+    confidence: 0.8
+    risk_category: FS_delete_sensitive
+  - behavior: file_permission_change
+    patterns: ['^\s*chmod\s+(\+x|[0-7]*7[0-7]*\s|a\+x|u\+x)']
+    technique: T1222.002
+    technique_name: "File and Directory Permissions Modification: Linux"
+    confidence: 0.6
+    risk_category: Execution
+  - behavior: sudo_abuse
+    patterns: ['^\s*sudo\b', '^\s*su(\s|$)']
+    technique: T1548.003
+    technique_name: "Abuse Elevation Control Mechanism: Sudo and Sudo Caching"
+    confidence: 0.6
+    risk_category: Execution
+  - behavior: system_information_discovery
+    commands: [uname, hostname, hostnamectl, uptime, df, free, lscpu, lsblk, lsb_release, dmidecode, date, nproc, env, printenv]
+    technique: T1082
+    technique_name: System Information Discovery
+    confidence: 0.85
+    risk_category: Discovery
+  - behavior: system_network_connections_discovery
+    commands: [netstat, ss, lsof]
+    technique: T1049
+    technique_name: System Network Connections Discovery
+    confidence: 0.85
+    risk_category: Discovery
+  - behavior: remote_system_discovery
+    commands: [ping, ping6, arp, nc, ncat, netcat, telnet, dig, nslookup, host, traceroute]
+    technique: T1018
+    technique_name: Remote System Discovery
+    confidence: 0.75
+    risk_category: Discovery
+  - behavior: logged_in_user_discovery
+    commands: [w, who, id, groups, users, last]
+    technique: T1033
+    technique_name: System Owner/User Discovery
+    confidence: 0.8
+    risk_category: Discovery
+  - behavior: file_search
+    commands: [find, locate, grep, stat, file, strings, head, tail, less, more, md5sum, sha256sum, which, whereis]
+    technique: T1083
+    technique_name: File and Directory Discovery
+    confidence: 0.65
+    risk_category: Discovery
+  - behavior: ingress_tool_transfer_http
+    commands: [curl, wget, tftp, ftp]
+    technique: T1105
+    technique_name: Ingress Tool Transfer
+    confidence: 0.75
+    risk_category: Payload_transfer
+  - behavior: software_discovery
+    commands: [dpkg, docker, systemctl, service, crontab, ps]
+    technique: T1518
+    technique_name: Software Discovery
+    confidence: 0.55
+    risk_category: Discovery
+  - behavior: shell_execution
+    patterns: ['^\s*(\./|/tmp/|/var/tmp/|/dev/shm/)\S+', '^\s*(sudo\s+)?(ba)?sh\s+\S+\.sh', '^\s*python3?\s+\S+\.py', '^\s*perl\s+\S+']
+    technique: T1059.004
+    technique_name: "Command and Scripting Interpreter: Unix Shell"
+    confidence: 0.75
+    risk_category: Execution

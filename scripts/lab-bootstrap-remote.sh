@@ -7,6 +7,9 @@
 #
 # Profiles: ent-web-01 | finance-db-01 | ops-app-01 (alias: ops-srv-01)
 # Re-running is safe (use after `git pull`). Existing .env is kept unless --force-env.
+#
+# Telemetry to the SOC dashboard: pass the token printed by scripts/soc-dashboard-setup.sh
+#   NETOSIS_INGEST_TOKEN=<token> bash scripts/lab-bootstrap-remote.sh ent-web-01
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -56,6 +59,20 @@ else
   echo "[*] Keeping existing .env (pass --force-env to replace)"
 fi
 
+# Optional overrides from the caller's environment (kept out of git on purpose).
+for key in NETOSIS_INGEST_TOKEN NETOSIS_CONTROLLER_URL; do
+  val="${!key:-}"
+  if [[ -n "$val" ]]; then
+    if grep -q "^${key}=" "$ROOT/.env"; then sed -i "s|^${key}=.*|${key}=${val}|" "$ROOT/.env"
+    else echo "${key}=${val}" >> "$ROOT/.env"; fi
+    echo "[*] Set ${key} in .env"
+  fi
+done
+if ! grep -qE '^NETOSIS_INGEST_TOKEN=.+' "$ROOT/.env"; then
+  echo "[!] NETOSIS_INGEST_TOKEN not set — this honeypot will not appear on the SOC dashboard."
+  echo "    Re-run with:  NETOSIS_INGEST_TOKEN=<token from soc-dashboard-setup.sh> bash $0 $PROFILE"
+fi
+
 mkdir -p "$ROOT/data"
 chown -R netosis:netosis "$ROOT/data" "$ROOT/.env"
 chmod 600 "$ROOT/.env"
@@ -66,6 +83,12 @@ systemctl enable netosis-ssh.service >/dev/null
 systemctl restart netosis-ssh.service
 sleep 2
 systemctl --no-pager --lines=15 status netosis-ssh.service || true
+
+# Node agent: live CPU/mem/connections for the SOC's network view (outbound only)
+case "$PROFILE" in ent-web-01) CTID=102 ;; finance-db-01) CTID=104 ;; ops-app-01) CTID=105 ;; esac
+NETOSIS_INGEST_TOKEN="$(grep -E '^NETOSIS_INGEST_TOKEN=' "$ROOT/.env" | cut -d= -f2-)" \
+NETOSIS_CONTROLLER_URL="$(grep -E '^NETOSIS_CONTROLLER_URL=' "$ROOT/.env" | cut -d= -f2-)" \
+  bash "$ROOT/scripts/agent-install.sh" "$PROFILE" honeypot "$CTID" || echo "[!] agent install failed (honeypot still runs)"
 
 LLM_URL="$(grep -E '^NETOSIS_LLM_BASE_URL=' "$ROOT/.env" | cut -d= -f2-)"
 echo

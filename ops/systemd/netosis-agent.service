@@ -1,0 +1,37 @@
+[Unit]
+Description=NetOsis node agent (pushes this node's live state to the SOC; listens on nothing)
+Documentation=file:///opt/netosis/docs/soc-dashboard.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Own unprivileged user: not the honeypot's "netosis" user, so the honeypot
+# process can neither read the token nor tamper with the agent.
+User=netosis-agent
+Group=netosis-agent
+# root:root 0600 — systemd reads it before dropping privileges
+EnvironmentFile=/etc/netosis/agent.env
+Environment=PYTHONUNBUFFERED=1
+# root-owned copy outside the repo; -I ignores PYTHON* env and the cwd
+ExecStart=/usr/bin/python3 -I /usr/local/lib/netosis-agent/netosis_agent.py
+Restart=always
+RestartSec=5
+
+# Hardening (kept to options that work inside unprivileged LXC containers)
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+# outbound HTTP to the controller + the local systemd bus for `systemctl is-active`
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=64M
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target

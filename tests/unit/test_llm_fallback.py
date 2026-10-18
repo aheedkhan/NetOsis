@@ -60,12 +60,17 @@ def test_junk_command_skips_llm() -> None:
 
 
 def test_real_binary_goes_to_llm_and_is_marked() -> None:
+    # uptime/df/free/uname are now answered deterministically from host.system
+    # facts (faster + always consistent) — strace is a real binary (KNOWN_
+    # BINARIES) the engine still has no deterministic branch for, so it's a
+    # true LLM-fallback case. The mock has no special case for it either, so
+    # it comes back as "command not found" — still LLM-routed and marked.
     from deception.command_engine.engine import execute
 
     session = Session(host=VirtualHost.load(HOST), session_id="t")
-    r = execute(session, "uptime")
+    r = execute(session, "strace -p 1")
     assert r.llm_fallback is True
-    assert "[llm]" in r.stdout
+    assert "[llm]" in (r.stdout + r.stderr)
 
 
 class _CountingClient:

@@ -1,0 +1,119 @@
+# Fake corporate network every honeypot shows to scans (nmap / ping / nc / ssh / curl).
+# The controller answers all of it — nothing here is ever really scanned.
+#
+# NEVER list real assets (real servers .40/.50, SOC 192.168.40.0/24, OPNsense
+# management, Jbox). Only honeypots and pure decoys belong here.
+#
+# pivot: true  -> a real honeypot sensor listens there (port 2222); `ssh` from a
+#                 fake shell is relayed to it for real (lateral movement).
+# ctid:         -> Proxmox CTID for that sensor. The relay auto-wakes it via the
+#                 controller (POST /v1/pivot/wake) if it's powered off to save
+#                 power — see scripts/ssh_honeypot.py:_handle_pivot.
+# ssh: deny    -> port 22 open, but every password is rejected.
+# default:     -> state of ports not listed: closed (same VLAN, RST) or filtered (behind FW).
+
+domain: corp.local
+
+subnets:
+  - {cidr: 192.168.30.0/24, name: ENTERPRISE, gateway: 192.168.30.254}
+  - {cidr: 192.168.10.0/24, name: FINANCE, gateway: 192.168.10.254}
+  - {cidr: 192.168.20.0/24, name: OPERATIONS, gateway: 192.168.20.254}
+
+hosts:
+  # ---------------------------------------------------------------- ENTERPRISE (VLAN 30)
+  - ip: 192.168.30.254
+    hostname: gw-ent
+    os: freebsd
+    icmp: true
+    default: filtered
+    ports:
+      - {port: 53, service: domain, version: "Unbound 1.19.3"}
+  - ip: 192.168.30.10
+    hostname: ent-web-01
+    os: linux
+    pivot: true
+    ctid: 102
+    ports:
+      - {port: 22, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10 (Ubuntu Linux; protocol 2.0)"}
+      - {port: 80, service: http, version: "nginx 1.18.0 (Ubuntu)"}
+    http: {title: "Corp Intranet", server: "nginx/1.18.0 (Ubuntu)"}
+  - ip: 192.168.30.21
+    hostname: ent-dc-01
+    os: windows
+    ports:
+      - {port: 53, service: domain, version: "Simple DNS Plus"}
+      - {port: 88, service: kerberos-sec, version: "Microsoft Windows Kerberos"}
+      - {port: 135, service: msrpc, version: "Microsoft Windows RPC"}
+      - {port: 139, service: netbios-ssn, version: "Microsoft Windows netbios-ssn"}
+      - {port: 389, service: ldap, version: "Microsoft Windows Active Directory LDAP (Domain: corp.local, Site: Default-First-Site-Name)"}
+      - {port: 445, service: microsoft-ds, version: ""}
+      - {port: 464, service: kpasswd5, version: ""}
+      - {port: 636, service: tcpwrapped, version: ""}
+      - {port: 3268, service: ldap, version: "Microsoft Windows Active Directory LDAP"}
+      - {port: 3389, service: ms-wbt-server, version: "Microsoft Terminal Services"}
+  - ip: 192.168.30.25
+    hostname: ent-mail-01
+    os: linux
+    ssh: deny
+    ports:
+      - {port: 22, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)"}
+      - {port: 25, service: smtp, version: "Postfix smtpd"}
+      - {port: 143, service: imap, version: "Dovecot imapd (Ubuntu)"}
+      - {port: 993, service: ssl/imap, version: "Dovecot imapd (Ubuntu)"}
+  - ip: 192.168.30.31
+    hostname: ent-jump-01
+    os: linux
+    ssh: deny
+    ports:
+      - {port: 22, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10 (Ubuntu Linux; protocol 2.0)"}
+
+  # ---------------------------------------------------------------- FINANCE (VLAN 10)
+  - ip: 192.168.10.254
+    hostname: gw-fin
+    os: freebsd
+    icmp: true
+    default: filtered
+    ports: []
+  - ip: 192.168.10.10
+    hostname: finance-db-01
+    os: linux
+    pivot: true
+    ctid: 104
+    default: filtered
+    ports:
+      - {port: 22, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10 (Ubuntu Linux; protocol 2.0)"}
+      - {port: 5432, service: postgresql, version: "PostgreSQL DB 14.11 - 14.12"}
+  - ip: 192.168.10.20
+    hostname: finance-app-01
+    os: linux
+    default: filtered
+    ports:
+      - {port: 443, service: ssl/http, version: "nginx 1.18.0 (Ubuntu)"}
+      - {port: 8443, service: ssl/http, version: "Apache Tomcat 9.0.58"}
+    http: {title: "Finance Portal - Sign in", server: "nginx/1.18.0 (Ubuntu)"}
+
+  # ---------------------------------------------------------------- OPERATIONS (VLAN 20)
+  - ip: 192.168.20.254
+    hostname: gw-ops
+    os: freebsd
+    icmp: true
+    default: filtered
+    ports: []
+  - ip: 192.168.20.10
+    hostname: ops-app-01
+    os: linux
+    pivot: true
+    ctid: 105
+    default: filtered
+    ports:
+      - {port: 22, service: ssh, version: "OpenSSH 8.9p1 Ubuntu 3ubuntu0.10 (Ubuntu Linux; protocol 2.0)"}
+      - {port: 8080, service: http, version: "Jetty 9.4.44.v20210927"}
+    http: {title: "OpsSync ERP", server: "Jetty(9.4.44.v20210927)"}
+  - ip: 192.168.20.30
+    hostname: ops-backup-01
+    os: linux
+    ssh: deny
+    default: filtered
+    ports:
+      - {port: 22, service: ssh, version: "OpenSSH 8.2p1 Ubuntu 4ubuntu0.11 (Ubuntu Linux; protocol 2.0)"}
+      - {port: 873, service: rsync, version: "(protocol version 31)"}

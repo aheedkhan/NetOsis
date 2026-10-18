@@ -32,7 +32,11 @@ def test_ls_home(session: Session) -> None:
     r = execute(session, "ls")
     assert r.exit_code == 0
     assert "notes.txt" in r.stdout
+    assert ".bashrc" not in r.stdout  # real bash hides dotfiles without -a
+
+    r = execute(session, "ls -a")
     assert ".bashrc" in r.stdout
+    assert "notes.txt" in r.stdout
 
 
 def test_cat_notes(session: Session) -> None:
@@ -58,11 +62,26 @@ def test_unknown_command_answers_instantly(session: Session) -> None:
     assert "command not found" in (r.stdout + r.stderr)
 
 
-def test_llm_fallback_uname_uses_hostname(session: Session) -> None:
+def test_uname_is_deterministic_and_uses_hostname(session: Session) -> None:
+    # uname/uptime/df/free are answered from host.system facts, not the LLM —
+    # instant and always consistent with ps/ss/the rest of the fake system.
     r = execute(session, "uname -a")
-    assert r.llm_fallback is True
+    assert r.llm_fallback is False
     assert r.exit_code == 0
     assert session.host.hostname in r.stdout
+    assert session.host.system["kernel"] in r.stdout
+
+    r2 = execute(session, "uptime")
+    assert r2.llm_fallback is False
+    assert "load average" in r2.stdout
+
+    r3 = execute(session, "df -h")
+    assert r3.llm_fallback is False
+    assert "/" in r3.stdout
+
+    r4 = execute(session, "free -m")
+    assert r4.llm_fallback is False
+    assert "Mem:" in r4.stdout
 
 
 def test_ps(session: Session) -> None:

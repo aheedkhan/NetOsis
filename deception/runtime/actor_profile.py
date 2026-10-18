@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from deception.runtime.persona import classify
+
 
 @dataclass
 class ActorProfile:
@@ -24,6 +26,12 @@ class ActorProfile:
     packages_attempted: list[str] = field(default_factory=list)
     # Virtual FS artifacts this actor created (for restore + RAG)
     artifacts: list[dict[str, Any]] = field(default_factory=list)
+    # Timeline + reach, shown on the SOC dashboard
+    first_seen: str = ""
+    last_seen: str = ""
+    hosts: list[str] = field(default_factory=list)
+    sandbox_jobs: int = 0
+    auth_failures: int = 0
 
     def observe(self, event: dict[str, Any], risk_score: float, level: str) -> None:
         cmd = event.get("command")
@@ -45,12 +53,20 @@ class ActorProfile:
             self.canary_hits += 1
         self.risk_score = risk_score
         self.level = level
+        ts = event.get("timestamp")
+        if ts:
+            self.first_seen = self.first_seen or str(ts)
+            self.last_seen = str(ts)
+        host = event.get("target_host")
+        if host and host not in self.hosts:
+            self.hosts.append(str(host))
 
     def sync_session_mutations(self, session: Any) -> None:
         """Mirror live FS/package theater from Session into the profile."""
         self.paths_created = list(getattr(session, "created_paths", []) or [])
         self.paths_deleted = list(getattr(session, "deleted_paths", []) or [])
         self.packages_attempted = list(getattr(session, "packages_attempted", []) or [])
+        self.sandbox_jobs = max(self.sandbox_jobs, len(getattr(session, "sandbox_jobs", []) or []))
         arts: list[dict[str, Any]] = []
         fs = getattr(getattr(session, "host", None), "filesystem", {}) or {}
         for path in self.paths_created:
@@ -87,6 +103,15 @@ class ActorProfile:
                 if cur not in fs:
                     fs[cur] = {"type": "dir"}
 
+    def persona(self):
+        return classify(
+            self.commands,
+            categories=self.categories,
+            packages=self.packages_attempted,
+            sandbox_jobs=self.sandbox_jobs,
+            auth_failures=self.auth_failures,
+        )
+
     def summary(self) -> dict[str, Any]:
         return {
             "actor_id": self.actor_id,
@@ -103,6 +128,12 @@ class ActorProfile:
             "paths_deleted": list(self.paths_deleted),
             "packages_attempted": list(self.packages_attempted),
             "artifacts": list(self.artifacts),
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
+            "hosts": list(self.hosts),
+            "sandbox_jobs": self.sandbox_jobs,
+            "auth_failures": self.auth_failures,
+            "persona": self.persona().to_dict(),
         }
 
     @classmethod
@@ -123,6 +154,11 @@ class ActorProfile:
             paths_deleted=list(raw.get("paths_deleted") or []),
             packages_attempted=list(raw.get("packages_attempted") or []),
             artifacts=list(raw.get("artifacts") or []),
+            first_seen=str(raw.get("first_seen") or ""),
+            last_seen=str(raw.get("last_seen") or ""),
+            hosts=list(raw.get("hosts") or []),
+            sandbox_jobs=int(raw.get("sandbox_jobs") or 0),
+            auth_failures=int(raw.get("auth_failures") or 0),
         )
 
     def to_rag_text(self, *, is_current: bool) -> str:
@@ -137,8 +173,15 @@ class ActorProfile:
         arts = ", ".join(
             f"{a.get('path')}[{a.get('type')}]" for a in self.artifacts[:20]
         ) or "(none)"
+        persona = self.persona()
+        behaviour = (
+            f"Behaviour so far: {persona.label.lower()} — this attacker {persona.summary}."
+            if persona.id != "opportunist"
+            else "Behaviour so far: too early to tell."
+        )
         return (
             f"Actor profile [{self.actor_id}] source_ip={self.source_ip}. {role} "
+            f"{behaviour} "
             f"Risk {self.level} score={self.risk_score}. "
             f"Techniques: {', '.join(self.techniques) or '(none)'}. "
             f"Risk categories: {', '.join(self.categories) or '(none)'}. "

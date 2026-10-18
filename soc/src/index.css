@@ -1,0 +1,262 @@
+@import "tailwindcss";
+
+/*
+  NetOsis — design tokens.
+  Palette from the brief. Fills/marks use the brief's colours; text uses the
+  deeper "-ink" variants so every label passes WCAG AA (4.5:1) on white.
+*/
+
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-canvas: #f5f7fb;
+  --color-surface: #ffffff;
+  --color-ink: #14243a;
+  --color-ink-2: #4d5d73;
+  --color-ink-3: #64748b;
+  --color-line: #e4e9f1;
+  --color-line-2: #edf1f6;
+  --color-hover: #f1f4f9;
+
+  --color-blue: #2563eb;
+  --color-blue-soft: #eaf1fe;
+  --color-cyan: #06b6d4;
+  --color-cyan-ink: #0e7490;
+  --color-red: #f05d68;
+  --color-red-ink: #c8323f;
+  --color-red-soft: #fdeef0;
+  --color-amber: #f5a524;
+  --color-amber-ink: #9a5b00;
+  --color-amber-soft: #fef5e4;
+  --color-green: #10b981;
+  --color-green-ink: #047857;
+  --color-green-soft: #e8f8f2;
+  --color-violet: #7c6cf2;
+
+  --radius-card: 12px;
+  --shadow-card: 0 1px 2px rgb(20 36 58 / 0.04), 0 4px 16px -8px rgb(20 36 58 / 0.08);
+  --shadow-float: 0 2px 4px rgb(20 36 58 / 0.05), 0 16px 40px -12px rgb(20 36 58 / 0.18);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: #d6e4fd;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* A surface: white, 1px line, faint lift. Frosted only where it floats over content. */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+  .glass {
+    background: rgb(255 255 255 / 0.72);
+    backdrop-filter: blur(14px) saturate(1.5);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5);
+    border: 1px solid rgb(255 255 255 / 0.9);
+    box-shadow: 0 0 0 1px rgb(20 36 58 / 0.06), var(--shadow-float);
+    border-radius: 10px;
+  }
+  .card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 0;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .card-sub {
+    font-size: 12px;
+    color: var(--color-ink-3);
+    margin-top: 2px;
+  }
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-ligatures: none;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--color-ink-2);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .btn:hover {
+    background: var(--color-hover);
+    color: var(--color-ink);
+  }
+  .btn[aria-pressed="true"] {
+    background: var(--color-blue-soft);
+    border-color: #c9dafc;
+    color: var(--color-blue);
+  }
+  .link {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-blue);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .link:hover {
+    text-decoration: underline;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .field {
+    height: 32px;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    background: var(--color-surface);
+    padding: 0 10px;
+    font-size: 13px;
+    color: var(--color-ink);
+  }
+  .field::placeholder {
+    color: var(--color-ink-3);
+  }
+  .table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12.5px;
+  }
+  .table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fafbfd;
+    text-align: left;
+    font-weight: 500;
+    font-size: 11.5px;
+    color: var(--color-ink-3);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-line);
+    white-space: nowrap;
+  }
+  .table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--color-line-2);
+    vertical-align: middle;
+  }
+  .table tbody tr {
+    transition: background 0.12s;
+  }
+  .table tbody tr:hover {
+    background: #f8fafd;
+  }
+  .table tbody tr[data-selected="true"] {
+    background: var(--color-blue-soft);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, #eef1f6 0%, #f6f8fb 50%, #eef1f6 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: 6px;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.live-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* React Flow, restyled to the system */
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__controls {
+  box-shadow: var(--shadow-float) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+}
+.react-flow__controls-button {
+  border-bottom-color: var(--color-line-2) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

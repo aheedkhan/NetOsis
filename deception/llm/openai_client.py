@@ -1,7 +1,8 @@
-"""OpenAI-compatible chat client for local Qwen (Ollama / vLLM / NIM).
+"""OpenAI-compatible chat client for a local Qwen model (Ollama / vLLM).
 
-Default for this lab (CPU-only, shared with Proxmox): qwen2.5:3b via Ollama.
-See docs/llm-local.md.
+Default for this lab (CPU-only, shared with Proxmox): qwen2.5:0.5b live via
+Ollama on the SOC controller, with qwen2.5:3b used offline to pre-warm the
+response cache. Fully local — no external API required.
 """
 
 from __future__ import annotations
@@ -28,13 +29,11 @@ class OpenAICompatibleClient:
         self.base_url = (
             base_url
             or os.environ.get("NETOSIS_LLM_BASE_URL")
-            or os.environ.get("NVIDIA_BASE_URL")
             or "http://127.0.0.1:11434/v1"
         ).rstrip("/")
         self.api_key = (
             api_key
             or os.environ.get("NETOSIS_LLM_API_KEY")
-            or os.environ.get("NVIDIA_API_KEY")
             or "not-needed"
         )
         self.model = (

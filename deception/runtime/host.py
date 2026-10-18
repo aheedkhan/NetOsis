@@ -27,6 +27,10 @@ class VirtualHost:
     network: dict[str, Any] = field(default_factory=dict)
     visible: bool = True
     fqdn: str = ""
+    # Filled in by deception.system.pack.apply_system_pack: uptime/kernel/CPU/
+    # memory/disk facts used so uptime, df, free, uname etc. are consistent
+    # and don't need the LLM.
+    system: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: str | Path) -> VirtualHost:
@@ -39,7 +43,7 @@ class VirtualHost:
         for key, meta in fs.items():
             p = "/" if key == "/" else key.rstrip("/") or "/"
             normalized[p] = meta if isinstance(meta, dict) else {"type": "file", "content": str(meta)}
-        return cls(
+        host = cls(
             path=path,
             raw=raw,
             hostname=str(raw.get("hostname", "unknown")),
@@ -57,6 +61,11 @@ class VirtualHost:
             visible=bool(raw.get("visible", True)),
             fqdn=str(raw.get("fqdn", "")),
         )
+        if raw.get("system_pack", True):
+            from deception.system.pack import apply_system_pack
+
+            apply_system_pack(host)
+        return host
 
     def write_file(self, path: str, content: str, *, canary: bool = False, artifact_id: str | None = None) -> None:
         """Inject a virtual file (used by adaptive deception actions)."""
@@ -115,6 +124,12 @@ class Session:
     last_packages: list[str] = field(default_factory=list)
     # Phase-1 sandbox job log (feeds actor RAG)
     sandbox_jobs: list[dict[str, Any]] = field(default_factory=list)
+    # Paths this attacker has successfully read (for RAG / canary-exfil detection)
+    files_read: list[str] = field(default_factory=list)
+    # Raw command history, newest last (used by fscmds pipe/chain layer + /proc theater)
+    history: list[str] = field(default_factory=list)
+    # Extra synthetic auth.log lines appended for THIS attacker's own session
+    auth_log_extra: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.user:

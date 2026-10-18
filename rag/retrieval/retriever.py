@@ -1,7 +1,7 @@
 """Lightweight lexical retriever (TF-IDF style).
 
-Maps to NVIDIA RAG Blueprint retrieve stage without requiring NeMo Embed NIM /
-Elasticsearch. Swap-in dense embeddings later via the same Retriever protocol.
+Fully local and in-memory — no vector database needed at this scale. Swap-in
+dense embeddings later via the same Retriever protocol.
 """
 
 from __future__ import annotations

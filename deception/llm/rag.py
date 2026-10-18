@@ -63,6 +63,15 @@ def _forced_mutation_hits(
     return forced
 
 
+def _forced_identity_hit(corpus: list[RagDocument]) -> list[ScoredDocument]:
+    """host.identity is small and needed by almost every answer (hostname,
+    OS, IP) — never let the hundreds of fs/* docs crowd it out of top_k."""
+    for doc in corpus:
+        if doc.doc_id == "host.identity":
+            return [ScoredDocument(document=doc, score=1.15)]
+    return []
+
+
 def _forced_effects_hits(corpus: list[RagDocument], command: str) -> list[ScoredDocument]:
     """Pin real-system command-effect lore for create/delete/write/apt."""
     name = (command.strip().split() or [""])[0].lower()
@@ -130,15 +139,17 @@ def retrieve_context(
     forced = _forced_file_hits(corpus, command)
     mutations = _forced_mutation_hits(corpus, session)
     effects = _forced_effects_hits(corpus, command)
+    identity = _forced_identity_hit(corpus)
     hits = _merge_hits(
+        identity,
         effects,
         mutations,
         forced,
         dense_hits,
         lexical_hits,
-        top_k=max(k, len(forced) + len(mutations) + len(effects) + k),
+        top_k=max(k, len(forced) + len(mutations) + len(effects) + len(identity) + k),
     )
-    hits = hits[: max(k + len(mutations) + len(effects), 1)]
+    hits = hits[: max(k + len(mutations) + len(effects) + len(identity), 1)]
 
     if not hits:
         hits = LexicalRetriever(corpus).retrieve(session.host.hostname, top_k=1)

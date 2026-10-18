@@ -1,7 +1,7 @@
 """Chunk virtual host / deception knowledge into RAG documents.
 
-Inspired by NVIDIA RAG Blueprint ingest stage (scaled down: no SeaweedFS/OCR).
-Authoritative host facts remain YAML state; rag/corpus/ adds supplemental lore.
+Authoritative host facts remain YAML state (plus the generated system facts
+in deception/system/pack.py); rag/corpus/ adds supplemental lore.
 """
 
 from __future__ import annotations
