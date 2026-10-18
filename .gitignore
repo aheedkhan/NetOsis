@@ -56,3 +56,6 @@ skills-lock.json
 
 # TypeScript incremental build cache
 soc/tsconfig.tsbuildinfo
+
+# Raw screen recordings stay local; README uses the GIF cuts in docs/media/
+*.webm
