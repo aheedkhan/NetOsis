@@ -13,7 +13,7 @@
 [![ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK%20mapped-c8323f)](mitre/)
 [![Lab](https://img.shields.io/badge/lab-Proxmox%20%2B%20OPNsense-2563eb)](docs/network.md)
 
-[Features](#-features) · [How it works](#-how-it-works) · [Quick start](#-quick-start) · [Deploy to the lab](#-deploy-to-the-lab) · [Security model](#-security-model) · [Roadmap](#-roadmap)
+[Features](#-features) · [How it works](#-how-it-works) · [Run it locally](#-run-it-locally) · [Security model](#-security-model) · [Roadmap](#-roadmap)
 
 <img src="docs/media/overview-panels.gif" alt="NetOsis SOC overview: live KPIs, 3D attack globe, intelligence feed, topology and MITRE mix" width="100%">
 
@@ -212,7 +212,7 @@ Thresholds and weights are in [`policy/rules/baseline.yml`](policy/rules/baselin
 
 ---
 
-## 🧪 Quick start
+## 🧪 Run it locally
 
 ```bash
 git clone https://github.com/aheedkhan/NetOsis.git && cd NetOsis
@@ -250,41 +250,17 @@ Stack: React · TypeScript · Vite · Tailwind v4 · TanStack Query/Table · Rea
 
 ---
 
-## 🚀 Deploy to the lab
-
-Kali attacks the firewall's WAN address from outside, like the Internet would.
-
-| Node | Role | Address |
-|---|---|---|
-| OPNsense (VM 101) | gateway, WAN `172.30.227.100` = the lab's "public IP" | VLAN gateways `.254` |
-| CT 102 `ent-web-01` | entry honeypot (WAN :22 forwards here) | `192.168.30.10` |
-| CT 104 `finance-db-01` | pivot target, auto-wake | `192.168.10.10` |
-| CT 105 `ops-app-01` | pivot target, auto-wake | `192.168.20.10` |
-| VM 103 controller | SOC dashboard, LLM, RAG | `192.168.40.31` |
-
-```bash
-# SOC VM: controller + dashboard + its own agent; prints the ingest token
-cd /opt/netosis && bash scripts/soc-dashboard-setup.sh
-
-# each honeypot CT: honeypot + node agent
-NETOSIS_INGEST_TOKEN=<token> bash /opt/netosis/scripts/lab-bootstrap-remote.sh ent-web-01
-```
-
-Full steps: [ops/SERVER_RUNBOOK.md](ops/SERVER_RUNBOOK.md) · dashboard internals: [docs/soc-dashboard.md](docs/soc-dashboard.md).
-
----
-
 ## 🔐 Security model
 
 * **No real shell, ever.** Attackers only talk to the emulated shell; commands are never executed on the host.
-* **Segmented lab.** No cross-VLAN traffic except honeypot → honeypot on `:2222`; honeypots have no Internet access.
+* **Segmented by design.** No cross-segment traffic except honeypot → honeypot on `:2222`; honeypots have no Internet access.
 * **Write-only, token-guarded ingest.** `/v1/ingest`, `/v1/agent` and `/v1/pivot/wake` need the lab token (constant-time compare). Power-on is limited to an allowlist of honeypot CTIDs with a restricted Proxmox token.
 * **Push-only agents.**
   * They listen on nothing and ignore replies.
   * Each runs as its own unprivileged user under systemd hardening.
   * The token lives in a root-only file the honeypot process can't read.
 * **Secrets stay server-side.** `controller/.env` (mode 600, gitignored) is never sent to the browser.
-* **Dashboard access.** Reachable only from the management jumpbox (firewall rule). Analyst login is next on the [roadmap](docs/PLAN-functional-soc.md).
+* **Dashboard access.** Keep it on a trusted admin network; analyst login is next on the [roadmap](docs/PLAN-functional-soc.md).
 
 See [SECURITY.md](SECURITY.md).
 

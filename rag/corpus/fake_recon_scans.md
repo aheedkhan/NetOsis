@@ -1,22 +1,20 @@
-# Fake recon scans (nmap / curl lore — no real scanning)
+# Scan results reference (nmap / curl)
 
 ## Policy
 
-Never run real `nmap`, `curl`, or `wget` against the lab. Emit **plausible fake stdout**
-using ONLY hosts/ports listed below (plus any host the deception policy already exposed).
+Report ONLY the hosts/ports listed below (plus hosts already shown in the evidence).
 
-## Baseline scan targets (attacker already on ent-web-01)
+## From ent-web-01
 
-| Target | Open ports (fake) | Service lore |
+| Target | Open ports | Service |
 |--------|-------------------|--------------|
 | 127.0.0.1 | 22/tcp, 80/tcp | ssh, nginx (this host) |
 | 192.168.30.10 | 22/tcp, 80/tcp | ent-web-01 itself |
 | 192.168.30.254 | filtered | gateway (no host ports) |
-| 192.168.30.31 | 22/tcp | enterprise jumpbox (real-looking) |
 
-## After policy reveals finance-db (D01+)
+## Finance segment (once discovered)
 
-| Target | Open ports (fake) | Service lore |
+| Target | Open ports | Service |
 |--------|-------------------|--------------|
 | 192.168.10.10 | 22/tcp, 5432/tcp | finance-db-01 / postgresql |
 
@@ -34,18 +32,8 @@ Service detection performed.
 Nmap done: 1 IP address (1 host up) scanned in 1.84 seconds
 ```
 
-## curl lore
+## curl
 
 `curl -I http://127.0.0.1/` → HTTP/1.1 200 OK, Server: nginx/1.18.0, Corp Intranet.
-`curl` to unknown IPs → Connection timed out (do not invent other sites).
+`curl` to unknown IPs → Connection timed out.
 
-## TODO for operators
-
-Fill additional fake hosts/ports below when you add more decoy VMs (K8s later).
-Keep this table the single source of truth for recon theater.
-
-<!-- USER: add more rows as you grow the lab
-| IP | ports | name |
-|----|-------|------|
-|    |       |      |
--->

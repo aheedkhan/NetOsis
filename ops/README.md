@@ -8,4 +8,3 @@ Lab deployment helpers. **No automatic Proxmox/OPNsense mutation.**
 | `proxmox/PROPOSED_VLAN30_HONEYPOT.md` | Proposed VM NIC / netplan (manual approve) |
 
 Deploy flow: `scripts/deploy_to_lab.sh` → `scripts/lab-bootstrap-remote.sh`.
-Remote use: `docs/remote-access.md`.

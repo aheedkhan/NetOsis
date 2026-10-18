@@ -1,6 +1,6 @@
 # Operations app decoy (OPS-HP-01) — low-level honeypot on VLAN 20.
 hostname: ops-app-01
-role: ops-app-hhp
+role: ops-app
 os: Ubuntu 22.04.4 LTS
 vlan: 20
 ip: 192.168.20.10

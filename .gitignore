@@ -59,3 +59,16 @@ soc/tsconfig.tsbuildinfo
 
 # Raw screen recordings stay local; README uses the GIF cuts in docs/media/
 *.webm
+
+# Personal / workstation-only material (kept locally, never published)
+scripts/lab-access/
+docs/remote-access.md
+ops/proxmox/SHIFT_TO_SERVER.md
+Text File.txt
+PROMPT_FOR_CURSOR.md
+NETOSIS_NEW_PROJECT_CURSOR_BOOTSTRAP.md
+COORDINATION.md
+HANDOFF.md
+*.xlsx
+*.docx
+globe_crop.png

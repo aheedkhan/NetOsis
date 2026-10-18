@@ -41,5 +41,5 @@ architecture is verified.
 
 ## Failure modes
 
-Scripts that need credentials exit with an error when they are missing and
-do not invent credentials.
+Scripts that need credentials exit with an error when they are missing; they never
+invent or hardcode them.

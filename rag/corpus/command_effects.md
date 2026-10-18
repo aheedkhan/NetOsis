@@ -1,4 +1,4 @@
-# Real Ubuntu command effects (anti-hallucination lore for LLM)
+# Ubuntu command effects
 
 Use this as the ONLY guide for how create/delete/write commands behave.
 Never invent files, directories, packages, or errors not implied by the
@@ -30,13 +30,13 @@ Never invent files, directories, packages, or errors not implied by the
 
 ## apt / apt-get install PKG
 
-* On this decoy: packages are **already newest** (theater). No real download.
+* On this host: packages are **already the newest version**. Nothing is downloaded.
 * Print Reading package lists / already the newest version / 0 newly installed.
 * Do not invent package versions not in evidence.
 
 ## What you must NOT do
 
 * Do not invent paths that are not in the filesystem evidence or the mutation record.
-* Do not claim installs downloaded .deb files or changed real packages.
+* Do not claim installs downloaded .deb files or changed installed packages.
 * Do not mix OTHER attackers' artifacts into this shell.
-* Successful create/delete/write: prefer **empty stdout** like a real bash shell.
+* Successful create/delete/write: prefer **empty stdout** like bash.
