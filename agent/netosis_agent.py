@@ -6,14 +6,18 @@ systemd service. Design rules:
 
 * Push only. It opens no listening socket, so nothing (attacker or outsider)
   can connect to it. It only makes outbound HTTP POSTs to the controller.
+* Signed. Each report carries an HMAC over (time, path, body) made with this
+  node's own key; the key itself never travels, and a captured report can't
+  be replayed or edited (same scheme as controller/signing.py).
 * Read only. Everything comes from /proc, os.statvfs and `systemctl is-active`.
   It never executes anything it receives; the controller's reply is ignored.
 * Stdlib only, so it runs on the system python3 with no venv.
 * Never fatal. A controller outage just means the next report is tried later.
 
 Config (environment, normally /etc/netosis/agent.env, root:root 0600, read by systemd):
-    NETOSIS_CONTROLLER_URL   http://192.168.40.31:8000
-    NETOSIS_INGEST_TOKEN     same token the honeypots use
+    NETOSIS_CONTROLLER_URL   http://192.168.40.31:8001 (the controller's ingest port)
+    NETOSIS_NODE_KEY         this node's key (scripts/node_keys.py on the SOC VM)
+    NETOSIS_INGEST_TOKEN     legacy shared token, only used when there is no node key
     NETOSIS_NODE_NAME        ent-web-01 (default: hostname)
     NETOSIS_NODE_ROLE        honeypot | soc | other
     NETOSIS_NODE_CTID        102 (optional)
@@ -23,6 +27,8 @@ Config (environment, normally /etc/netosis/agent.env, root:root 0600, read by sy
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import socket
@@ -30,6 +36,7 @@ import struct
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -208,12 +215,28 @@ def build_report(cfg: dict[str, Any], cpu: CpuMeter, net: NetMeter) -> dict[str,
     }
 
 
+def sign(key: str, ts: str, method: str, path: str, body: bytes) -> str:
+    """Must match controller/signing.py:sign (tests/unit/test_signing.py checks)."""
+    msg = f"{ts}\n{method.upper()}\n{path}\n{hashlib.sha256(body).hexdigest()}".encode()
+    return hmac.new(key.encode(), msg, hashlib.sha256).hexdigest()
+
+
+def auth_headers(cfg: dict[str, Any], path: str, data: bytes) -> dict[str, str]:
+    if cfg["key"]:
+        ts = str(int(time.time()))
+        return {"X-Netosis-Node": cfg["name"], "X-Netosis-Ts": ts,
+                "X-Netosis-Sig": sign(cfg["key"], ts, "POST", path, data)}
+    return {"X-Netosis-Token": cfg["token"]}
+
+
 def post(cfg: dict[str, Any], body: dict[str, Any]) -> bool:
+    data = json.dumps(body).encode()
+    path = urllib.parse.urlparse(cfg["url"]).path.rstrip("/") + "/v1/agent"
     req = urllib.request.Request(
         cfg["url"] + "/v1/agent",
-        data=json.dumps(body).encode(),
+        data=data,
         method="POST",
-        headers={"Content-Type": "application/json", "X-Netosis-Token": cfg["token"]},
+        headers={"Content-Type": "application/json", **auth_headers(cfg, path, data)},
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -227,7 +250,8 @@ def post(cfg: dict[str, Any], body: dict[str, Any]) -> bool:
 def config() -> dict[str, Any]:
     ctid = os.environ.get("NETOSIS_NODE_CTID", "").strip()
     return {
-        "url": os.environ.get("NETOSIS_CONTROLLER_URL", "http://192.168.40.31:8000").rstrip("/"),
+        "url": os.environ.get("NETOSIS_CONTROLLER_URL", "http://192.168.40.31:8001").rstrip("/"),
+        "key": os.environ.get("NETOSIS_NODE_KEY", "").strip(),
         "token": os.environ.get("NETOSIS_INGEST_TOKEN", ""),
         "name": os.environ.get("NETOSIS_NODE_NAME") or socket.gethostname(),
         "role": os.environ.get("NETOSIS_NODE_ROLE", "other"),
@@ -243,9 +267,10 @@ def main(argv: list[str]) -> int:
     if "--once" in argv:
         print(json.dumps(build_report(cfg, cpu, net), indent=2))
         return 0
-    if not cfg["token"]:
-        print("[agent] NETOSIS_INGEST_TOKEN not set; the controller will refuse reports", flush=True)
-    print(f"[agent] {cfg['name']} ({cfg['role']}) -> {cfg['url']} every {cfg['interval']:.0f}s", flush=True)
+    if not (cfg["key"] or cfg["token"]):
+        print("[agent] no NETOSIS_NODE_KEY set; the controller will refuse reports", flush=True)
+    auth = "signed" if cfg["key"] else "shared token"
+    print(f"[agent] {cfg['name']} ({cfg['role']}) -> {cfg['url']} every {cfg['interval']:.0f}s ({auth})", flush=True)
     time.sleep(1)  # first CPU/net delta
     while True:
         post(cfg, build_report(cfg, cpu, net))

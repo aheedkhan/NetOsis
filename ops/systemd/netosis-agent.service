@@ -25,11 +25,9 @@ AmbientCapabilities=
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-RestrictSUIDSGID=true
-LockPersonality=true
-RestrictRealtime=true
-# outbound HTTP to the controller + the local systemd bus for `systemctl is-active`
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# seccomp-based options (RestrictAddressFamilies & co.) live in
+# netosis-agent-seccomp.conf: agent-install.sh adds them where the container
+# allows seccomp filters and drops them (with a warning) where it doesn't
 MemoryMax=64M
 CPUQuota=10%
 

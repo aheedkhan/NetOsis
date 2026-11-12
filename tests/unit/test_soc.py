@@ -311,3 +311,27 @@ def test_agent_report_rejects_garbage(store: SocStore) -> None:
     assert store.agent_report({"agent": "x"}) is False
     assert store.agent_report({"agent": {"name": "n"}, "tcp": {"flows": ["bad", {"dir": "sideways"}]}}) is True
     assert store.agents_table()[0]["flows"] == []
+
+
+def test_topology_adapts_to_what_agents_report(store: SocStore) -> None:
+    # an undocumented machine with an agent, and an undocumented address it talks to
+    rep = _agent("ops-new-01", "192.168.20.77", [{"dir": "out", "peer": "192.168.30.99", "port": 445, "count": 2}])
+    rep["agent"]["role"] = "other"
+    assert store.agent_report(rep)
+    net = store.network()
+    hosts = {h["name"]: (v["id"], h) for v in net["vlans"] for h in v["hosts"]}
+    vid, new = hosts["ops-new-01"]
+    assert vid == 20 and new["kind"] == "discovered" and new["source"] == "agent" and new["online"]
+    vid, seen = hosts["192.168.30.99"]
+    assert vid == 30 and seen["kind"] == "unknown" and seen["source"] == "observed"
+    assert hosts["ent-web-01"][1]["source"] == "documented"  # no agent yet
+    assert any(f["from"] == "ops-new-01" and f["to"] == "192.168.30.99" and f["kind"] == "unmapped" for f in net["live_flows"])
+    assert net["sources"]["observed"] == 1
+
+
+def test_refused_writes_are_tracked(store: SocStore) -> None:
+    store.auth_seen("ent-web-01", "/v1/agent", "192.168.30.10")
+    store.auth_rejected("192.168.30.10", "/v1/ingest", "posed as finance-db-01", "ent-web-01")
+    sec = store.security()
+    assert sec["nodes"][0]["method"] == "signed"
+    assert sec["refused_total"] == 1 and sec["refused_recent"][0]["in_lab"] is True

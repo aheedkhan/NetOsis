@@ -218,7 +218,7 @@ Thresholds and weights are in [`policy/rules/baseline.yml`](policy/rules/baselin
 git clone https://github.com/aheedkhan/NetOsis.git && cd NetOsis
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pytest -q                                   # 85 passed
+pytest -q                                   # 98 passed
 ```
 
 **Talk to a honeypot**
@@ -254,15 +254,19 @@ Stack: React · TypeScript · Vite · Tailwind v4 · TanStack Query/Table · Rea
 
 * **No real shell, ever.** Attackers only talk to the emulated shell; commands are never executed on the host.
 * **Segmented by design.** No cross-segment traffic except honeypot → honeypot on `:2222`; honeypots have no Internet access.
-* **Write-only, token-guarded ingest.** `/v1/ingest`, `/v1/agent` and `/v1/pivot/wake` need the lab token (constant-time compare). Power-on is limited to an allowlist of honeypot CTIDs with a restricted Proxmox token.
+* **Signed, write-only ingest.**
+  * Every node signs its writes with its own key (HMAC over time, path and body), so nothing secret crosses the wire, replays are refused, and a node can only report as itself.
+  * Nodes write to a separate port that serves no dashboard.
+  * Power-on is limited to an allowlist of honeypot CTIDs with a restricted Proxmox token.
 * **Push-only agents.**
   * They listen on nothing and ignore replies.
   * Each runs as its own unprivileged user under systemd hardening.
-  * The token lives in a root-only file the honeypot process can't read.
+  * Its key lives in a root-only file the honeypot process can't read.
+* **The fake shell hides the lab.** A test runs 27 recon commands on every fake host and fails if any of them shows NetOsis, the agent or a real address.
 * **Secrets stay server-side.** `controller/.env` (mode 600, gitignored) is never sent to the browser.
 * **Dashboard access.** Keep it on a trusted admin network; analyst login is next on the [roadmap](docs/PLAN-functional-soc.md).
 
-See [SECURITY.md](SECURITY.md).
+See [SECURITY.md](SECURITY.md) and, for a real deployment, [docs/DEPLOY-lab.md](docs/DEPLOY-lab.md).
 
 ---
 
@@ -294,10 +298,10 @@ The dashboard is real-data and interactive. The next phase makes it **operationa
 * **Response:** end session / quarantine IP and power controls, delivered through a pull-model action queue.
 * **Detection:** exfiltration detection, a sandbox gate, then a k3s sandbox proof of concept.
 
-➡️ [docs/PLAN-functional-soc.md](docs/PLAN-functional-soc.md)
+➡️ [docs/PLAN-functional-soc.md](docs/PLAN-functional-soc.md). First, the whole lab (firewall included) is rebuilt on one PC: [docs/LOCAL-LAB.md](docs/LOCAL-LAB.md)
 
 ## 📚 Docs
 
-[Network & SDN](docs/network.md) · [OPNsense guide](docs/OPNSENSE_SDN_GUIDE.md) · [Firewall study guide](docs/NETWORKING_AND_FIREWALL_MASTER_STUDY_GUIDE.md) · [SSH honeypot](docs/ssh-honeypot.md) · [Local LLM](docs/llm-local.md) · [RAG](docs/rag.md) · [SOC dashboard](docs/soc-dashboard.md) · [Architecture](ARCHITECTURE.md)
+[Local lab (no server)](docs/LOCAL-LAB.md) · [Lab deployment](docs/DEPLOY-lab.md) · [Network & SDN](docs/network.md) · [OPNsense guide](docs/OPNSENSE_SDN_GUIDE.md) · [Firewall study guide](docs/NETWORKING_AND_FIREWALL_MASTER_STUDY_GUIDE.md) · [SSH honeypot](docs/ssh-honeypot.md) · [Local LLM](docs/llm-local.md) · [RAG](docs/rag.md) · [SOC dashboard](docs/soc-dashboard.md) · [Architecture](ARCHITECTURE.md)
 
 <div align="center"><sub>NetOsis: deception that adapts, telemetry you can trust.</sub></div>

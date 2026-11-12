@@ -106,6 +106,9 @@ class SocStore:
         self.profiles: dict[tuple[str, str], dict[str, Any]] = {}
         self.graphs: dict[str, dict[str, Any]] = {}
         self.agents: dict[str, dict[str, Any]] = {}  # live only, never persisted
+        self.auth_nodes: dict[str, dict[str, Any]] = {}  # how each writer authenticated, live only
+        self.auth_recent: deque[dict[str, Any]] = deque(maxlen=50)
+        self.auth_refused = 0
         self.seq = 0
         self.cond = threading.Condition()
         self._events_path = self.dir / "events.jsonl"
@@ -246,6 +249,36 @@ class SocStore:
         with self.cond:
             self.agents[name] = report
         return True
+
+    def auth_seen(self, node: str | None, path: str, ip: str) -> None:
+        """A write was accepted: remember how each node authenticates."""
+        key = node or f"shared token ({ip})"
+        with self.cond:
+            self.auth_nodes[key] = {"name": key, "method": "signed" if node else "token", "ip": ip,
+                                    "path": path, "last": _now()}
+
+    def auth_rejected(self, ip: str, path: str, reason: str, node: str | None = None) -> None:
+        """A write was refused. From inside the lab that means a forged or replayed request."""
+        with self.cond:
+            self.auth_refused += 1
+            self.auth_recent.appendleft({"t": _now(), "ip": ip[:45], "path": path[:32], "reason": reason[:64],
+                                         "node": (node or "")[:64] or None, "in_lab": _in_lab(ip)})
+
+    def security(self) -> dict[str, Any]:
+        nodes_env = [n.strip() for n in os.environ.get("NETOSIS_NODES", "").split(",") if n.strip()]
+        with self.cond:
+            nodes = sorted(copy.deepcopy(list(self.auth_nodes.values())), key=lambda n: n["name"])
+            recent = list(self.auth_recent)
+            refused = self.auth_refused
+        return {
+            "require_signed": os.environ.get("NETOSIS_REQUIRE_SIGNED", "") == "1",
+            "dashboard_port": int(os.environ.get("NETOSIS_CONTROLLER_PORT", "8000") or 8000),
+            "ingest_port": int(os.environ.get("NETOSIS_INGEST_PORT", "8001") or 0),
+            "allowed_nodes": nodes_env or None,
+            "nodes": nodes,
+            "refused_total": refused,
+            "refused_recent": recent,
+        }
 
     def agents_table(self) -> list[dict[str, Any]]:
         now = _now()
@@ -668,12 +701,54 @@ class SocStore:
             for ip in a["addresses"]:
                 by_ip.setdefault(ip, a["name"])
 
+        # Adaptive part: the map above is what's documented; the lab is whatever
+        # actually reports or talks. An agent on a machine nobody documented, or a
+        # lab address seen in live connections, becomes a host of its own.
+        documented = {h["name"] for v in network_map.VLANS for h in v["hosts"]}
+        documented_ips = {h["ip"] for v in network_map.VLANS for h in v["hosts"]}
+        extra: dict[int, list[dict[str, Any]]] = {}
+
+        def vlan_of(ip: str) -> int:
+            for v in network_map.VLANS:
+                try:
+                    if ipaddress.ip_address(ip) in ipaddress.ip_network(v["cidr"]):
+                        return v["id"]
+                except ValueError:
+                    return 0
+            return 0
+
+        for a in agents.values():
+            if a["name"] in documented or any(ip in documented_ips for ip in a["addresses"]):
+                continue
+            ip = next((x for x in a["addresses"] if vlan_of(x)), a["addresses"][0] if a["addresses"] else "")
+            kind = a["role"] if a["role"] in ("honeypot", "soc") else "discovered"
+            kinds[a["name"]] = kind
+            extra.setdefault(vlan_of(ip), []).append(
+                {"name": a["name"], "ip": ip, "kind": kind, "ctid": a.get("ctid"), "source": "agent",
+                 "discovered": True, "note": "reported by its agent, not in the documented map"})
+        seen_by: dict[str, set[str]] = {}
+        for a in agents.values():
+            if a["online"]:
+                for f in a["flows"]:
+                    if f["peer"] not in by_ip and _in_lab(f["peer"]):
+                        seen_by.setdefault(f["peer"], set()).add(a["name"])
+        for ip, who in sorted(seen_by.items()):
+            by_ip[ip] = ip
+            kinds[ip] = "unknown"
+            extra.setdefault(vlan_of(ip), []).append(
+                {"name": ip, "ip": ip, "kind": "unknown", "source": "observed", "discovered": True,
+                 "note": f"seen in live connections of {', '.join(sorted(who))}"})
+
         vlans = []
-        for vlan in network_map.VLANS:
+        groups = [*network_map.VLANS]
+        if extra.get(0):
+            groups.append({"id": 0, "name": "Unmapped", "cidr": "outside the known VLANs", "gateway": "", "hosts": []})
+        for vlan in groups:
             hosts = []
-            for h in vlan["hosts"]:
+            for h in [*vlan["hosts"], *extra.get(vlan["id"], [])]:
                 h = dict(h)
                 a = agents.get(h["name"]) or next((x for x in agents.values() if h["ip"] in x["addresses"]), None)
+                h.setdefault("source", "agent" if a else "documented")
                 if a:
                     h["agent"] = {k: a[k] for k in ("online", "last_seen", "uptime_s", "cpu_pct", "cpus", "load",
                                                      "mem", "disk", "net", "services", "listening", "addresses",
@@ -686,6 +761,8 @@ class SocStore:
                              last_seen=max(filter(None, [s.get("last_seen"), a and a["last_seen"]]), default=None))
                 elif a:
                     h["online"] = a["online"]
+                elif h["source"] == "observed":
+                    h["online"] = True  # it is talking right now
                 h["events"] = hits.get(h["name"], 0)
                 hosts.append(h)
             vlans.append({**{k: v for k, v in vlan.items() if k != "hosts"}, "hosts": hosts})
@@ -708,7 +785,7 @@ class SocStore:
         flows = []
         for fl in live.values():
             to_kind, from_kind = kinds.get(fl["to"]), kinds.get(fl["from"])
-            if fl["port"] in (8000,) and to_kind == "soc":
+            if fl["port"] in (8000, 8001) and to_kind == "soc":
                 fl["kind"] = "telemetry"
             elif fl["port"] == 11434:
                 fl["kind"] = "llm"
@@ -716,16 +793,19 @@ class SocStore:
                 fl["kind"] = "pivot"
             elif to_kind == "honeypot" and fl["port"] in (22, 2222) and fl["from"] not in kinds:
                 fl["kind"] = "attack"
+            elif {to_kind, from_kind} & {"discovered", "unknown"}:
+                fl["kind"] = "unmapped"  # traffic with something nobody documented: worth a look
             else:
                 fl["kind"] = "other"
             flows.append(fl)
-        flows.sort(key=lambda f: ("attack", "pivot", "other", "llm", "telemetry").index(f["kind"]))
+        flows.sort(key=lambda f: ("attack", "pivot", "unmapped", "other", "llm", "telemetry").index(f["kind"]))
 
         return {"edge": network_map.EDGE, "outside": network_map.OUTSIDE, "vlans": vlans,
                 "paths": [{"from": a, "to": b, "count": n} for (a, b), n in pivots.items()],
                 "entry_events": hits.get("ent-web-01", 0),
                 "live_flows": flows,
-                "agents": {"online": sum(1 for a in agents.values() if a["online"]), "total": len(agents)}}
+                "agents": {"online": sum(1 for a in agents.values() if a["online"]), "total": len(agents)},
+                "sources": dict(Counter(h["source"] for v in vlans for h in v["hosts"]))}
 
     def ai(self, window: int | None = None) -> dict[str, Any]:
         events = [e for e in self._events(window) if e.get("event_type") == "command"]
@@ -758,6 +838,7 @@ class SocStore:
                            "events_total": self.seq, "max_events": self.events.maxlen},
             "sensors": sensors,
             "agents": self.agents_table(),
+            "security": self.security(),
             "geodb": geo.geodb_status(),
             "site_configured": geo.site(demo=False) is not None,
             "ingest_token_set": bool(os.environ.get("NETOSIS_INGEST_TOKEN")),

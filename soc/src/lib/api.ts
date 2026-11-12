@@ -195,7 +195,11 @@ export interface GeoData {
 export interface NetHost {
   name: string;
   ip: string;
-  kind: "honeypot" | "production" | "decoy" | "soc";
+  kind: "honeypot" | "production" | "decoy" | "soc" | "discovered" | "unknown";
+  /** documented = from the lab map only; agent = its agent reports live; observed = seen in live connections */
+  source: "documented" | "agent" | "observed";
+  /** not in the documented lab map: revealed by an agent or by live connections */
+  discovered?: boolean;
   ctid?: number;
   note?: string;
   online?: boolean;
@@ -234,7 +238,7 @@ export interface LiveFlow {
   to: string;
   port: number;
   count: number;
-  kind: "attack" | "pivot" | "telemetry" | "llm" | "other";
+  kind: "attack" | "pivot" | "unmapped" | "telemetry" | "llm" | "other";
   peer_ip: string | null;
 }
 export interface Network {
@@ -245,6 +249,7 @@ export interface Network {
   entry_events: number;
   live_flows: LiveFlow[];
   agents: { online: number; total: number };
+  sources: Partial<Record<NetHost["source"], number>>;
 }
 
 export interface GraphNode {
@@ -287,10 +292,21 @@ export interface AiStatus {
   recent_llm: { ts: string; command: string; sensor: string }[];
 }
 
+export interface Security {
+  require_signed: boolean;
+  dashboard_port: number;
+  ingest_port: number;
+  allowed_nodes: string[] | null;
+  nodes: { name: string; method: "signed" | "token"; ip: string; path: string; last: number }[];
+  refused_total: number;
+  refused_recent: { t: number; ip: string; path: string; reason: string; node: string | null; in_lab: boolean }[];
+}
+
 export interface Health {
   controller: { uptime_s: number; events_stored: number; events_total: number; max_events: number };
   sensors: SensorState[];
   agents: AgentRow[];
+  security: Security;
   geodb: { available: boolean; database: string | null };
   site_configured: boolean;
   ingest_token_set: boolean;

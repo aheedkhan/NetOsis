@@ -77,23 +77,31 @@ Why an attacker can't reach or tamper with it:
 * **No listening socket.** The agent only makes outbound POSTs to the controller and ignores the reply.
   `ss -ltnp` shows nothing for it.
 * **A separate user.** It runs as `netosis-agent`, not as the honeypot's `netosis` user. Its code is a
-  root-owned copy in `/usr/local/lib/netosis-agent/`, and its token is in `/etc/netosis/agent.env`
+  root-owned copy in `/usr/local/lib/netosis-agent/`, and its key is in `/etc/netosis/agent.env`
   (root, 0600). systemd reads that file before dropping privileges.
 * **The attacker only sees the fake shell.** An SSH attacker talks to the emulated shell and never
   gets a real process on the CT.
 * **systemd hardening:** no capabilities, `NoNewPrivileges`, read-only filesystem, and limits of 64 MB and 10 % CPU.
-* **Token-guarded on the controller.** `/v1/agent`, `/v1/ingest` and `/v1/pivot/wake` all require
-  `X-Netosis-Token`. Reports are shape-checked and size-capped.
+* **Signed on the wire.**
+  * `/v1/agent`, `/v1/ingest` and `/v1/pivot/wake` need a per-node HMAC signature, made with the node's own key (`controller/signing.py`).
+  * The key never travels, replays are refused, and a node can only report as itself.
+  * Reports are shape-checked and size-capped.
 
 Install (already done by `lab-bootstrap-remote.sh` and `soc-dashboard-setup.sh`):
 
 ```bash
-NETOSIS_INGEST_TOKEN=<token> bash scripts/agent-install.sh ent-web-01 honeypot 102
+NETOSIS_NODE_KEY=<key> bash scripts/agent-install.sh ent-web-01 honeypot 102   # key: scripts/node_keys.py
 bash scripts/agent-install.sh controller soc          # on the SOC VM
 python3 agent/netosis_agent.py --once                  # print one report, send nothing
 ```
 
-Firewall: each node needs outbound TCP to `192.168.40.31:8000`, nothing inbound.
+Firewall: each node needs outbound TCP to `192.168.40.31:8001` (ingest), nothing inbound. Full rules, install order and log locations: [DEPLOY-lab.md](DEPLOY-lab.md).
+
+The topology is **adaptive**:
+* The documented VLANs and hosts (`controller/network_map.py`) are the skeleton.
+* A machine whose agent reports but isn't in the map appears as **NEW · discovered** in the VLAN its address belongs to.
+* A lab address seen only in live connections appears as **NEW · unknown**.
+* Traffic with either of those is drawn in amber as *undocumented host*.
 
 ## Modules
 
@@ -106,7 +114,7 @@ Firewall: each node needs outbound TCP to `192.168.40.31:8000`, nothing inbound.
 | MITRE ATT&CK | Only the techniques the NetOsis mapper can emit; drill down to the exact commands | `/api/attack` |
 | Deception Engine | The D01–D07 ladder, thresholds from `policy/rules/baseline.yml`, every fired response with its score and trigger | `/api/deception` |
 | Telemetry | Searchable, filterable raw events, JSON inspector, CSV/JSON export of exactly what is shown | `/api/events` |
-| Network Intelligence | Documented VLANs plus live state from node agents (load, services, open connections), live flows, observed pivots | `/api/network`, `/api/agents` |
+| Network Intelligence | Documented VLANs plus hosts discovered live, with state from node agents (load, services, open connections), live flows, observed pivots | `/api/network`, `/api/agents` |
 | AI Intelligence | Ollama reachability, share of commands the LLM answered vs the deterministic engine | `/api/ai` |
 | System & Policies | Sensor heartbeats, controller health, what is (not) configured | `/api/health` |
 

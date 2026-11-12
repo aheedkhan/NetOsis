@@ -12,9 +12,11 @@ import os
 import urllib.error
 import urllib.request
 
+from controller.signing import auth_headers
+
 
 def controller_base_url() -> str:
-    return os.environ.get("NETOSIS_CONTROLLER_URL", "http://192.168.40.31:8000").rstrip("/")
+    return os.environ.get("NETOSIS_CONTROLLER_URL", "http://192.168.40.31:8001").rstrip("/")
 
 
 def wake_ctid(ctid: int, *, timeout: float = 30.0) -> bool:
@@ -24,7 +26,7 @@ def wake_ctid(ctid: int, *, timeout: float = 30.0) -> bool:
     payload = json.dumps({"ctid": ctid}).encode()
     req = urllib.request.Request(
         url, data=payload, method="POST",
-        headers={"Content-Type": "application/json", "X-Netosis-Token": os.environ.get("NETOSIS_INGEST_TOKEN", "")},
+        headers={"Content-Type": "application/json", **auth_headers("POST", "/v1/pivot/wake", payload)},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:

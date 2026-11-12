@@ -1,5 +1,5 @@
-import { CircleCheck, CircleDashed, CircleX } from "lucide-react";
-import { useHealth } from "../lib/api";
+import { CircleCheck, CircleDashed, CircleX, KeyRound, ShieldAlert } from "lucide-react";
+import { useHealth, type Security } from "../lib/api";
 import { ago, duration } from "../lib/format";
 import { Card, CardHead, DemoTag, ErrorState, PageHead, Skeleton } from "../components/ui";
 
@@ -8,7 +8,28 @@ export default function System() {
   if (error) return <ErrorState error={error} />;
   if (isLoading || !data) return <Skeleton className="h-[420px]" />;
   const checks: { ok: boolean | null; label: string; detail: string }[] = [
-    { ok: data.ingest_token_set, label: "Ingest token", detail: data.ingest_token_set ? "Honeypots must authenticate to send telemetry" : "Not set — every honeypot is refused" },
+    { ok: data.ingest_token_set, label: "Master secret", detail: data.ingest_token_set ? "Set — each node's signing key is derived from it; it never leaves this VM" : "Not set — every node is refused" },
+    {
+      ok: data.security.require_signed ? true : null,
+      label: "Signed node requests",
+      detail: data.security.require_signed
+        ? "Required — every write is signed with the sender's own key, time-stamped and replay-checked"
+        : "Not enforced — the shared token is still accepted from anywhere (set NETOSIS_REQUIRE_SIGNED=1)",
+    },
+    {
+      ok: data.security.ingest_port && data.security.ingest_port !== data.security.dashboard_port ? true : null,
+      label: "Separate ingest port",
+      detail: data.security.ingest_port && data.security.ingest_port !== data.security.dashboard_port
+        ? `Nodes write to :${data.security.ingest_port}, which serves no dashboard; the dashboard on :${data.security.dashboard_port} accepts no node writes`
+        : "One port serves both — fine locally, split it on the lab",
+    },
+    {
+      ok: data.security.refused_recent.some((r) => r.in_lab && Date.now() / 1000 - r.t < 3600) ? false : true,
+      label: "Refused writes",
+      detail: data.security.refused_total
+        ? `${data.security.refused_total} refused since start${data.security.refused_recent.some((r) => r.in_lab) ? " — some from inside the lab, see Node security" : ""}`
+        : "None — no forged, replayed or impersonating request",
+    },
     { ok: data.sensors.some((s) => s.online), label: "Honeypots reporting", detail: `${data.sensors.filter((s) => s.online).length} of ${data.sensors.length} sent a heartbeat in the last 70 s` },
     { ok: data.agents.some((a) => a.online) ? true : null, label: "Node agents", detail: data.agents.length ? `${data.agents.filter((a) => a.online).length} of ${data.agents.length} reporting (outbound only, no open port)` : "None installed — run scripts/agent-install.sh on each node" },
     { ok: data.proxmox_configured ? true : null, label: "Honeypot auto-wake", detail: data.proxmox_configured ? "Proxmox token configured" : "Optional — Proxmox token not configured, powered-off honeypots won't wake on pivot" },
@@ -83,9 +104,10 @@ export default function System() {
         </table>
         </div>
         <p className="px-4 py-3 text-[11.5px] text-ink-3">
-          Secrets (ingest token, Proxmox token) live in controller/.env with mode 600 and are never sent to this page; only whether they are set.
+          Secrets (master secret, Proxmox token) live in controller/.env with mode 600 and are never sent to this page; only whether they are set.
         </p>
       </Card>
+      <NodeSecurity sec={data.security} />
       <Card className="mt-4">
         <CardHead title="Node agents" sub="Each node pushes its state every 10 s; agents open no port, so nothing can connect to them" />
         <div className="overflow-x-auto">
@@ -137,5 +159,75 @@ export default function System() {
         </div>
       </Card>
     </>
+  );
+}
+
+function NodeSecurity({ sec }: { sec: Security }) {
+  return (
+    <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 max-xl:grid-cols-1">
+      <Card>
+        <CardHead
+          title="Node security"
+          sub={sec.allowed_nodes ? `Only these nodes may write: ${sec.allowed_nodes.join(", ")}` : "Any node holding a valid key may write"}
+        />
+        <div className="overflow-x-auto">
+          <table className="table mt-2">
+            <thead>
+              <tr>
+                <th>Writer</th>
+                <th>Authenticates with</th>
+                <th>From</th>
+                <th>Last write</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sec.nodes.map((n) => (
+                <tr key={n.name}>
+                  <td className="font-medium">{n.name}</td>
+                  <td>
+                    <span className={`inline-flex items-center gap-1.5 ${n.method === "signed" ? "text-green-ink" : "text-amber-ink"}`}>
+                      <KeyRound className="size-3.5" />
+                      {n.method === "signed" ? "Own key (signed)" : "Shared token (local only)"}
+                    </span>
+                  </td>
+                  <td className="mono text-[12px]">{n.ip}</td>
+                  <td className="num text-ink-3 whitespace-nowrap">{ago(n.last)}</td>
+                </tr>
+              ))}
+              {sec.nodes.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-ink-3">No real node has written yet (demo data is not listed).</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card>
+        <CardHead title="Refused writes" sub="Bad, stale or replayed signatures, and nodes posing as another node" />
+        <ul className="grid gap-1 p-3">
+          {sec.refused_recent.slice(0, 8).map((r, i) => (
+            <li key={`${r.t}-${i}`} className="flex items-start gap-3 rounded-lg px-2 py-1.5">
+              <ShieldAlert className={`mt-0.5 size-4 shrink-0 ${r.in_lab ? "text-red" : "text-ink-3"}`} />
+              <span className="min-w-0">
+                <span className="block text-[12.5px]">
+                  <span className="mono">{r.ip}</span>
+                  {r.node && <span className="text-ink-3"> as {r.node}</span>} · {r.reason}
+                  {r.in_lab && <span className="ml-1.5 rounded bg-red-soft px-1 text-[10px] font-semibold text-red-ink">INSIDE LAB</span>}
+                </span>
+                <span className="block text-[11.5px] text-ink-3">
+                  {r.path} · {ago(r.t)}
+                </span>
+              </span>
+            </li>
+          ))}
+          {sec.refused_recent.length === 0 && (
+            <li className="flex items-center gap-3 px-2 py-2 text-[12.5px] text-ink-3">
+              <CircleCheck className="size-4 text-green" /> Nothing refused. A refusal from inside the lab would mean someone holds a node and is probing the SOC.
+            </li>
+          )}
+        </ul>
+      </Card>
+    </div>
   );
 }

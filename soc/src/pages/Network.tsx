@@ -11,6 +11,14 @@ const KIND: Record<NetHost["kind"], string> = {
   production: "Real server — honeypots are firewalled away from it",
   decoy: "Decoy host — answered by the network theater, no machine behind it",
   soc: "SOC controller — LLM, RAG, telemetry and this dashboard",
+  discovered: "Discovered — its agent reports, but it is not in the documented lab map",
+  unknown: "Unknown — a lab address seen in live connections, with no agent and no entry in the map",
+};
+
+const SOURCE: Record<NetHost["source"], string> = {
+  documented: "Lab map only (no agent reporting)",
+  agent: "Live, from its node agent",
+  observed: "Live, seen in other nodes' connections",
 };
 
 export default function Network() {
@@ -25,7 +33,11 @@ export default function Network() {
     <>
       <PageHead
         title="Network intelligence"
-        sub={`The lab as it is right now: ${data?.agents.online ?? 0} of ${data?.agents.total ?? 0} node agents reporting live connections and load. Red = attackers, dashed red = pivots, blue = telemetry to the SOC.`}
+        sub={`The lab as it is right now: ${data?.agents.online ?? 0} of ${data?.agents.total ?? 0} node agents reporting live connections and load${
+          data?.sources?.agent || data?.sources?.observed
+            ? ` · ${(data.sources.agent ?? 0) + (data.sources.observed ?? 0)} hosts live, ${data.sources.documented ?? 0} from the map only`
+            : ""
+        }${data?.vlans.some((v) => v.hosts.some((h) => h.discovered)) ? " · NEW = found live, not in the map" : ""}. Red = attackers, dashed red = pivots, blue = telemetry to the SOC.`}
       />
       <div className="grid grid-cols-[minmax(0,1fr)_320px] gap-4 max-xl:grid-cols-1">
         <Card className="overflow-hidden">
@@ -38,12 +50,14 @@ export default function Network() {
               <dl className="grid grid-cols-[100px_minmax(0,1fr)] gap-x-3 gap-y-2 p-4 pt-3 text-[12.5px]">
                 <dt className="text-ink-3">Address</dt>
                 <dd className="mono">{sel.ip}</dd>
+                <dt className="text-ink-3">Known from</dt>
+                <dd>{SOURCE[sel.source]}</dd>
                 <dt className="text-ink-3">Segment</dt>
                 <dd>
                   VLAN {vlanOf(sel)?.id} · {vlanOf(sel)?.name} <span className="mono text-ink-3">{vlanOf(sel)?.cidr}</span>
                 </dd>
                 <dt className="text-ink-3">Gateway</dt>
-                <dd className="mono">{vlanOf(sel)?.gateway}</dd>
+                <dd className="mono">{sel.agent?.gateway ?? (vlanOf(sel)?.gateway || "—")}</dd>
                 {sel.ctid && (
                   <>
                     <dt className="text-ink-3">Proxmox</dt>
@@ -81,8 +95,8 @@ export default function Network() {
           <Card>
             <CardHead title="Live connections" sub="TCP sessions open right now, from node agents" />
             <div className="grid gap-1 p-3">
-              {data?.live_flows.filter((f) => f.kind !== "other").map((f) => <FlowRow key={`${f.from}-${f.to}-${f.port}`} f={f} />)}
-              {data && data.live_flows.filter((f) => f.kind !== "other").length === 0 && (
+              {data?.live_flows.map((f) => <FlowRow key={`${f.from}-${f.to}-${f.port}`} f={f} />)}
+              {data && data.live_flows.length === 0 && (
                 <p className="px-2 text-[12px] text-ink-3">
                   {data.agents.online ? "Nothing connected right now." : "No node agent reporting — install with scripts/agent-install.sh."}
                 </p>
@@ -135,6 +149,7 @@ export default function Network() {
 const FLOW_STYLE: Record<LiveFlow["kind"], { label: string; cls: string }> = {
   attack: { label: "attacker", cls: "bg-red-soft text-red-ink" },
   pivot: { label: "pivot", cls: "bg-red-soft text-red-ink" },
+  unmapped: { label: "undocumented host", cls: "bg-amber-soft text-amber-ink" },
   telemetry: { label: "telemetry", cls: "bg-blue-soft text-blue" },
   llm: { label: "LLM", cls: "bg-[#f0eefe] text-[#5b4cd6]" },
   other: { label: "other", cls: "bg-line-2 text-ink-2" },

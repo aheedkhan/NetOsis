@@ -1,0 +1,16 @@
+# NetOsis logs (installed to /etc/logrotate.d/netosis by the setup scripts).
+# Writers open these files in append mode, so copytruncate is safe.
+# Honeypot CTs: attacker events, the source of truth for each sensor.
+# SOC VM: everything the controller received (the dashboard keeps its own
+# rolling window, so rotating this only shortens what a restart can replay).
+/opt/netosis/data/*.jsonl /opt/netosis/data/soc/*.jsonl {
+    weekly
+    maxsize 200M
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su netosis netosis
+}

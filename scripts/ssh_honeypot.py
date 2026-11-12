@@ -485,6 +485,8 @@ def handle_connection(
             elif ord(char) >= 32:
                 buf += char
                 channel.send(char)
+    except OSError:
+        pass  # the client hung up mid-answer (e.g. while a slow LLM reply was pending): a normal logout
     finally:
         if shipper is not None:
             shipper.session_closed()

@@ -11,7 +11,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/base.css";
-import { Globe2, Lock, Radar, Server, ShieldHalf, MonitorCog } from "lucide-react";
+import { Globe2, Lock, Radar, Server, ShieldHalf, MonitorCog, ScanSearch, CircleHelp } from "lucide-react";
 import type { NetHost, Network } from "../lib/api";
 
 const VLAN_STYLE: Record<number, { tint: string; ink: string; short: string }> = {
@@ -19,6 +19,7 @@ const VLAN_STYLE: Record<number, { tint: string; ink: string; short: string }> =
   20: { tint: "#e8f8f2", ink: "#047857", short: "OPS" },
   30: { tint: "#fef5e4", ink: "#9a5b00", short: "ENT" },
   40: { tint: "#f0eefe", ink: "#5b4cd6", short: "SOC" },
+  0: { tint: "#f1f3f6", ink: "#5b6474", short: "OTHER" },
 };
 // Reading order follows the attack: ENT (the only WAN-exposed segment) sits next
 // to the firewall, so the entry path and the usual ENT -> FIN pivot are short
@@ -30,7 +31,10 @@ type HostData = { host: NetHost; vlan: number; compact: boolean; onSelect?: (h: 
 function HostNode({ data }: NodeProps<Node<HostData>>) {
   const h = data.host;
   const v = VLAN_STYLE[data.vlan] ?? VLAN_STYLE[30];
-  const Icon = h.kind === "production" ? Lock : h.kind === "soc" ? MonitorCog : h.kind === "decoy" ? Radar : Server;
+  const Icon =
+    h.kind === "production" ? Lock : h.kind === "soc" ? MonitorCog : h.kind === "decoy" ? Radar
+      : h.kind === "discovered" ? ScanSearch : h.kind === "unknown" ? CircleHelp : Server;
+  const found = !!h.discovered;
   const on = h.kind === "honeypot" || h.agent ? h.online : undefined;
   const a = h.agent?.online ? h.agent : undefined;
   const memPct = a && a.mem.total ? Math.round((a.mem.used / a.mem.total) * 100) : null;
@@ -40,9 +44,9 @@ function HostNode({ data }: NodeProps<Node<HostData>>) {
       aria-label={`${h.name}, ${h.kind}`}
       className={`relative flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-white text-left transition-shadow hover:shadow-[var(--shadow-float)] ${
         data.compact ? "h-[46px] px-2" : "h-[58px] px-2.5"
-      } ${h.kind === "decoy" ? "border-dashed" : ""} ${data.selected ? "ring-2 ring-blue" : ""}`}
-      style={{ borderColor: h.kind === "honeypot" ? v.ink + "55" : "#e4e9f1" }}
-      title={`${h.name} · ${h.ip}`}
+      } ${h.kind === "decoy" || h.kind === "unknown" ? "border-dashed" : ""} ${data.selected ? "ring-2 ring-blue" : ""}`}
+      style={{ borderColor: found ? "#e0a10088" : h.kind === "honeypot" ? v.ink + "55" : "#e4e9f1" }}
+      title={`${h.name} · ${h.ip}${found ? " · not in the documented map" : ""}`}
     >
       <Handle type="target" position={Position.Top} className="!size-1 !border-0 !bg-transparent" />
       <Handle type="source" position={Position.Bottom} className="!size-1 !border-0 !bg-transparent" />
@@ -66,12 +70,21 @@ function HostNode({ data }: NodeProps<Node<HostData>>) {
                   ? "real · untouched"
                   : h.kind === "decoy"
                     ? "decoy (answered by theater)"
-                    : on === false
+                    : h.kind === "unknown"
+                      ? "seen talking · undocumented"
+                      : h.kind === "discovered" && on !== false
+                        ? "agent · undocumented"
+                        : on === false
                       ? "agent silent"
                       : "SOC"}
           </span>
         )}
       </span>
+      {found && (
+        <span className="absolute -top-1.5 left-2 rounded bg-amber-soft px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-ink">
+          new
+        </span>
+      )}
       {on !== undefined && (
         <span
           className={`absolute right-1.5 top-1.5 size-1.5 rounded-full ${on ? "bg-green" : "bg-[#cbd5e1]"}`}
@@ -174,8 +187,10 @@ function build(net: Network | undefined, compact: boolean, selected: string | nu
   const vlanTop = compact ? 0 : 0;
   const x0 = compact ? 178 : 260;
   const colGap = compact ? 14 : 22;
-  const vlans = (VLAN_ORDER.map((id) => net.vlans.find((v) => v.id === id)).filter(Boolean) as Network["vlans"]).map((v) =>
-    compact ? { ...v, hosts: v.hosts.filter((h) => h.kind === "honeypot" || h.kind === "soc") } : v,
+  // documented segments in reading order, then anything the agents revealed
+  const order = [...VLAN_ORDER, ...net.vlans.map((v) => v.id).filter((id) => !VLAN_ORDER.includes(id))];
+  const vlans = (order.map((id) => net.vlans.find((v) => v.id === id)).filter(Boolean) as Network["vlans"]).map((v) =>
+    compact ? { ...v, hosts: v.hosts.filter((h) => h.kind === "honeypot" || h.kind === "soc" || h.discovered) } : v,
   );
   const colW = hostW + pad * 2;
   const tallest = Math.max(...vlans.map((v) => v.hosts.length));
@@ -299,6 +314,19 @@ function build(net: Network | undefined, compact: boolean, selected: string | nu
         labelStyle: { fontSize: 10, fill: "#c8323f", fontWeight: 700 },
         labelBgStyle: { fill: "#fff" },
         zIndex: 10,
+      });
+    } else if ((f.kind === "unmapped" || f.kind === "other") && !compact) {
+      edges.push({
+        id: `live-${f.from}-${f.to}-${f.port}`,
+        source: from,
+        target: to,
+        type: "default",
+        animated: true,
+        style: { stroke: f.kind === "unmapped" ? "#e0a100" : "#94a3b8", strokeWidth: f.kind === "unmapped" ? 1.6 : 1, opacity: 0.8, strokeDasharray: "4 3" },
+        label: f.kind === "unmapped" ? `:${f.port}` : undefined,
+        labelStyle: { fontSize: 10, fill: "#9a5b00", fontWeight: 600 },
+        labelBgStyle: { fill: "#fff" },
+        zIndex: 5,
       });
     } else if ((f.kind === "telemetry" || f.kind === "llm") && !compact) {
       edges.push({

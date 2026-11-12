@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run ON the SOC VM (192.168.40.31) as root, inside the clone at /opt/netosis.
-# Installs the controller + dashboard as a systemd service and prints the one
-# secret the honeypots need (the ingest token).
+# Installs the controller + dashboard as a systemd service, and writes each
+# honeypot's own signing key to /root/netosis-node-keys.env (root 600) for
+# scripts/lab-rollout.sh. The master secret never leaves this VM.
 #
 #   cd /opt/netosis && git pull
 #   bash scripts/soc-dashboard-setup.sh
@@ -35,6 +36,9 @@ if [[ ! -f "$ENV" ]]; then
 # NetOsis controller settings (never commit this file)
 NETOSIS_INGEST_TOKEN=$TOKEN
 NETOSIS_CONTROLLER_PORT=8000
+NETOSIS_INGEST_PORT=8001
+NETOSIS_REQUIRE_SIGNED=1
+NETOSIS_NODES=ent-web-01,finance-db-01,ops-app-01,controller
 
 # Global attack map (optional). Arcs end at the lab's real location; without
 # these, live sources are still listed but no arcs are drawn.
@@ -55,10 +59,21 @@ EOT
   echo "[*] Generated controller/.env with a new ingest token"
 else
   echo "[*] Keeping existing controller/.env"
+  # settings added later: append only what is missing, never touch the secrets
+  for kv in NETOSIS_INGEST_PORT=8001 NETOSIS_REQUIRE_SIGNED=1 NETOSIS_NODES=ent-web-01,finance-db-01,ops-app-01,controller; do
+    grep -q "^${kv%%=*}=" "$ENV" || { echo "$kv" >> "$ENV"; echo "[*] Added ${kv%%=*} to controller/.env"; }
+  done
 fi
 mkdir -p "$ROOT/data/soc"
 chown -R netosis:netosis "$ROOT/data" "$ENV"
 chmod 600 "$ENV"
+
+install -m 0644 "$ROOT/ops/logrotate/netosis" /etc/logrotate.d/netosis
+install -d /etc/systemd/journald.conf.d
+install -m 0644 "$ROOT/ops/journald/netosis.conf" /etc/systemd/journald.conf.d/netosis.conf
+systemctl restart systemd-journald || true
+# signatures carry a timestamp: the SOC VM's clock must be right
+timedatectl set-ntp true 2>/dev/null || true
 
 install -m 0644 "$ROOT/ops/systemd/netosis-controller.service" /etc/systemd/system/netosis-controller.service
 systemctl daemon-reload
@@ -69,19 +84,21 @@ systemctl --no-pager --lines=8 status netosis-controller.service || true
 
 bash "$ROOT/scripts/agent-install.sh" controller soc || echo "[!] agent install failed (dashboard still runs)"
 
-TOKEN="$(grep -E '^NETOSIS_INGEST_TOKEN=' "$ENV" | cut -d= -f2-)"
+KEYS=/root/netosis-node-keys.env
+( umask 077; python3 "$ROOT/scripts/node_keys.py" --env ent-web-01 finance-db-01 ops-app-01 > "$KEYS" )
 IP="$(hostname -I | awk '{print $1}')"
 echo
-if curl -fsS -m 5 "http://127.0.0.1:8000/healthz" >/dev/null; then
-  echo "[+] controller up"
-else
-  echo "[!] controller not answering on :8000 — journalctl -u netosis-controller -n 30"
-fi
-echo "    Dashboard:   http://${IP:-192.168.40.31}:8000/   (open from the Jbox browser)"
-echo "    Logs:        journalctl -u netosis-controller -f"
+for p in 8000 8001; do
+  if curl -fsS -m 5 "http://127.0.0.1:$p/healthz" >/dev/null; then echo "[+] controller up on :$p"
+  else echo "[!] controller not answering on :$p — journalctl -u netosis-controller -n 30"; fi
+done
+echo "    Dashboard:   http://${IP:-192.168.40.31}:8000/   (Jbox only — see docs/DEPLOY-lab.md firewall rules)"
+echo "    Ingest:      http://${IP:-192.168.40.31}:8001/   (honeypot VLANs only; signed requests)"
+echo "    Logs:        journalctl -u netosis-controller -f    events: $ROOT/data/soc/events.jsonl"
 echo
-echo "    Give every honeypot this token (CT102, CT104, CT105), then restart it:"
-echo "      NETOSIS_INGEST_TOKEN=$TOKEN bash /opt/netosis/scripts/lab-bootstrap-remote.sh <profile>"
+echo "    Node keys written to $KEYS (root 600). Copy that file to the Proxmox host"
+echo "    as /root/netosis-node-keys.env, then run there:  bash scripts/lab-rollout.sh"
+echo "    (each CT gets only its own key; delete the copy afterwards)"
 echo
 echo "    Fill the dashboard without waiting for attackers (rehearsal / viva):"
-echo "      python3 scripts/soc_demo.py --controller http://127.0.0.1:8000 --token $TOKEN --speed 2"
+echo "      python3 scripts/soc_demo.py --controller http://127.0.0.1:8000 --speed 2"

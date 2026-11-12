@@ -8,7 +8,7 @@ as a live honeypot would ship it. Use it to:
   * see the dashboard populated before a real attacker shows up,
   * rehearse the viva demo with repeatable stories.
 
-  python scripts/soc_demo.py --controller http://192.168.40.31:8000 --token <ingest token>
+  python scripts/soc_demo.py --controller http://127.0.0.1:8000   # on the SOC VM; token from controller/.env
   python scripts/soc_demo.py ... --speed 4        # 4x faster
   python scripts/soc_demo.py ... --loop           # keep going, new "attackers" each round
 
@@ -234,7 +234,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--speed", type=float, default=1.0, help="2 = twice as fast")
     ap.add_argument("--loop", action="store_true")
     args = ap.parse_args(argv)
+    env = Path(__file__).resolve().parents[1] / "controller" / ".env"
+    if not args.token and env.is_file():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("NETOSIS_INGEST_TOKEN="):
+                args.token = line.split("=", 1)[1].strip().strip("'\"")
 
+    # demo data uses the shared token, which the controller only accepts from
+    # its own machine once signing is required; never a real node's key
+    os.environ.pop("NETOSIS_NODE_KEY", None)
     os.environ["NETOSIS_CONTROLLER_URL"] = args.controller
     os.environ["NETOSIS_INGEST_TOKEN"] = args.token
     os.environ.setdefault("NETOSIS_LLM_MODE", "mock")  # demo never needs Ollama

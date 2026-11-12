@@ -5,11 +5,13 @@ Design rules, in order of importance:
      from a background thread; on any failure the batch is dropped (the same
      events are already in the local telemetry.jsonl, so nothing is lost).
   2. Stdlib only (urllib), same as the LLM client.
-  3. Authenticated with a shared token so only honeypots can write to the SOC.
+  3. Signed with this node's own key (controller/signing.py) so only real
+     lab nodes can write to the SOC, each only as itself.
 
 Env:
-  NETOSIS_CONTROLLER_URL   http://192.168.40.31:8000
-  NETOSIS_INGEST_TOKEN     shared secret (same value in controller/.env)
+  NETOSIS_CONTROLLER_URL   http://192.168.40.31:8001 (the ingest port)
+  NETOSIS_NODE_KEY         this node's key (scripts/node_keys.py on the SOC VM)
+  NETOSIS_INGEST_TOKEN     legacy shared token, used only when there is no node key
   NETOSIS_SENSOR_NAME      defaults to the host YAML hostname
   NETOSIS_SHIP=0           turn shipping off
 """
@@ -22,10 +24,12 @@ import queue
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+from controller.signing import auth_headers, credentials
 from telemetry.schema.events import TelemetryEvent
 from telemetry.storage.jsonl import JsonlTelemetryStore
 
@@ -40,8 +44,8 @@ class Shipper:
         self.demo = demo
         self.sensor_ip = sensor_ip
         self.ctid = ctid
-        self.url = os.environ.get("NETOSIS_CONTROLLER_URL", "http://192.168.40.31:8000").rstrip("/") + "/v1/ingest"
-        self.token = os.environ.get("NETOSIS_INGEST_TOKEN", "")
+        self.url = os.environ.get("NETOSIS_CONTROLLER_URL", "http://192.168.40.31:8001").rstrip("/") + "/v1/ingest"
+        self.creds = credentials()  # read once: the honeypot's env is fixed at start
         self._q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=4000)
         self._started = time.time()
         self._sessions = 0
@@ -95,11 +99,14 @@ class Shipper:
         body["sensor"] = {"name": self.sensor, "ip": self.sensor_ip, "ctid": self.ctid}
         if self.demo:
             body["demo"] = True  # scripts/soc_demo.py: the SOC labels these "Demo data"
+        data = json.dumps(body).encode()
         req = urllib.request.Request(
             self.url,
-            data=json.dumps(body).encode(),
+            data=data,
             method="POST",
-            headers={"Content-Type": "application/json", "X-Netosis-Token": self.token},
+            headers={"Content-Type": "application/json",
+                     **auth_headers("POST", urllib.parse.urlparse(self.url).path, data,
+                                     node=self.sensor, creds=self.creds)},
         )
         try:
             with urllib.request.urlopen(req, timeout=5) as resp:
